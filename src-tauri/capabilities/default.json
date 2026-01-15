@@ -1,0 +1,37 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Permisos completos",
+  "windows": [
+    "main"
+  ],
+  "permissions": [
+    "core:default",
+    "opener:default",
+    "dialog:default",
+    "fs:default",
+    "fs:allow-read-file",
+    "sql:default",
+    "sql:allow-execute",
+    "sql:allow-select",
+    "sql:allow-load"
+  ],
+  "platforms": [
+    "windows"
+  ],
+  "scopes": [
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "$HOME/**",
+        "$DESKTOP/**",
+        "$DOWNLOADS/**",
+        "$DOCUMENT/**",
+        "C:\\**",
+        "C:/**",
+        "C:\\Users\\**",
+        "C:/Users/**"
+      ]
+    }
+  ]
+}
