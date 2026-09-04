@@ -1,11 +1,63 @@
-@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;800&family=Roboto:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Outfit:wght@600;700;800;900&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Estilos globales base */
+/* Estilos globales base con degradado premium */
 body {
-  background-color: #F5F5F5; /* El gris tenue que pedía el manual */
-  color: #333333;
+  background: radial-gradient(circle at top left, #0D1E36 0%, #06101E 100%);
+  color: #F8FAFC;
+  font-family: 'Inter', sans-serif;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Utilidades Premium de Cristal Templado (Glassmorphism) */
+@layer utilities {
+  .glass-panel {
+    background: rgba(11, 31, 59, 0.45);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+  }
+
+  .glass-panel-hover {
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .glass-panel-hover:hover {
+    background: rgba(16, 40, 74, 0.6);
+    border-color: rgba(242, 140, 40, 0.25);
+    box-shadow: 0 8px 32px 0 rgba(242, 140, 40, 0.08), 0 0 15px rgba(242, 140, 40, 0.1);
+    transform: translateY(-2px);
+  }
+
+  .text-glow-orange {
+    text-shadow: 0 0 10px rgba(242, 140, 40, 0.5);
+  }
+
+  .text-glow-blue {
+    text-shadow: 0 0 10px rgba(0, 210, 255, 0.5);
+  }
+}
+
+/* Personalización elegante de Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(5, 15, 30, 0.5);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(242, 140, 40, 0.3);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(242, 140, 40, 0.6);
 }

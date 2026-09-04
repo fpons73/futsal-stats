@@ -71,7 +71,7 @@ export default function DesignacionArbitros() {
     async function cargarEdiciones(tempId: string) {
         const db = await Database.load("sqlite:globalfutsal.db");
         const res = await db.select<SelectorData[]>(`
-      SELECT e.id, c.nombre || ' (' || t.nombre || ')' as nombre
+      SELECT e.id, c.nombre || ' (' || t.nombre || ')' || COALESCE(' - ' || e.nombre, '') as nombre
       FROM Edicion e JOIN Competicion c ON e.competicion_id = c.id JOIN Temporada t ON e.temporada_id = t.id
       WHERE e.temporada_id = $1 ORDER BY c.nombre ASC
     `, [tempId]);
@@ -173,14 +173,28 @@ export default function DesignacionArbitros() {
     const disponiblesFiltrados = disponibles.filter(a => a.nombre_deportivo.toLowerCase().includes(busqueda.toLowerCase()));
 
     return (
-        <div className="p-8 min-h-screen bg-gray-50 text-navy ml-0 flex flex-col">
+        <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
 
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
-                <div className="flex justify-between items-start">
-                    <h1 className="text-2xl font-bold text-navy flex items-center gap-3"><Gavel className="text-yellow-500" /> Designación de Árbitros</h1>
+            {/* CABECERA */}
+            <div className="glass-panel p-6 rounded-2xl border border-white/5 mb-6 shadow-2xl">
+                <div className="flex justify-between items-center">
+                    <div>
+                        <h1 className="text-2xl font-display font-black text-white flex items-center gap-3"><Gavel className="text-orange text-glow-orange animate-pulse" /> Designación de Árbitros</h1>
+                        <p className="text-silver/50 text-sm mt-1">Asigna colegiados a las diferentes ediciones y competiciones</p>
+                    </div>
                     <div className="flex gap-4">
-                        <div className="flex flex-col"><label className="text-[10px] uppercase font-bold text-gray-400">Temporada</label><select value={selTemporada} onChange={e => setSelTemporada(e.target.value)} className="p-2 border rounded-lg bg-gray-50 text-sm w-40 outline-none">{temporadas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select></div>
-                        <div className="flex flex-col"><label className="text-[10px] uppercase font-bold text-gray-400">Edición</label><select value={selEdicion} onChange={e => setSelEdicion(e.target.value)} className="p-2 border rounded-lg bg-gray-50 text-sm w-64 outline-none">{ediciones.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
+                        <div className="flex flex-col">
+                            <label className="text-[10px] uppercase font-black tracking-wider text-silver/40 mb-1">Temporada</label>
+                            <select value={selTemporada} onChange={e => setSelTemporada(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold w-40">
+                                {temporadas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
+                            </select>
+                        </div>
+                        <div className="flex flex-col">
+                            <label className="text-[10px] uppercase font-black tracking-wider text-silver/40 mb-1">Edición</label>
+                            <select value={selEdicion} onChange={e => setSelEdicion(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold w-64">
+                                {ediciones.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                            </select>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -188,51 +202,51 @@ export default function DesignacionArbitros() {
             <div className="flex gap-6 flex-1 h-[calc(100vh-250px)]">
 
                 {/* IZQ: DISPONIBLES */}
-                <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                    <div className="p-4 border-b flex gap-2">
-                        <div className="flex-1 flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border">
-                            <Search size={18} className="text-gray-400" />
-                            <input placeholder="Buscar árbitro..." className="bg-transparent outline-none w-full text-sm" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+                <div className="flex-1 glass-panel rounded-2xl border border-white/5 flex flex-col overflow-hidden shadow-2xl">
+                    <div className="p-4 border-b border-white/5 flex gap-2">
+                        <div className="flex-1 flex items-center gap-2 bg-navy-light/60 px-3 py-2 rounded-xl border border-white/5">
+                            <Search size={18} className="text-silver/40" />
+                            <input placeholder="Buscar árbitro..." className="bg-transparent outline-none w-full text-white placeholder-silver/40 text-sm" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
                         </div>
-                        <button onClick={abrirCrear} className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700" title="Nuevo Árbitro"><Plus size={20} /></button>
+                        <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white p-2.5 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]" title="Nuevo Árbitro"><Plus size={20} /></button>
                     </div>
                     <div className="flex-1 overflow-y-auto p-2 space-y-1">
                         {disponiblesFiltrados.map(arb => (
-                            <div key={arb.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg group">
+                            <div key={arb.id} className="flex items-center justify-between p-2 hover:bg-white/5 rounded-xl group transition-all duration-200">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-gray-100 overflow-hidden relative">
-                                        <ImagenLocal path={arb.foto_path} alt="" className="w-full h-full object-contain" />
+                                    <div className="w-8 h-8 rounded-full bg-navy border border-white/10 overflow-hidden relative shadow-inner flex items-center justify-center">
+                                        <ImagenLocal path={arb.foto_path} alt="" className="w-full h-full object-cover" />
                                     </div>
-                                    <span className="font-medium text-navy text-sm">{arb.nombre_deportivo}</span>
+                                    <span className="font-bold text-white group-hover:text-orange transition-colors text-sm">{arb.nombre_deportivo}</span>
                                 </div>
                                 <div className="flex gap-1">
-                                    <button onClick={() => abrirEditar(arb)} className="p-1.5 text-gray-400 hover:text-blue-600 bg-white border rounded"><Edit size={14} /></button>
-                                    <button onClick={() => asignar(arb)} className="bg-gray-100 text-gray-400 hover:bg-blue-100 hover:text-blue-600 p-1.5 rounded-md"><Plus size={16} /></button>
+                                    <button onClick={() => abrirEditar(arb)} className="p-1.5 text-accent-blue hover:bg-white/5 rounded-lg bg-navy border border-white/5 transition-colors"><Edit size={14} /></button>
+                                    <button onClick={() => asignar(arb)} className="bg-navy border border-white/5 text-success hover:bg-white/5 p-1.5 rounded-lg transition-colors"><Plus size={16} /></button>
                                 </div>
                             </div>
                         ))}
                     </div>
                 </div>
 
-                <div className="flex items-center justify-center text-gray-300"><ChevronRight size={32} /></div>
+                <div className="flex items-center justify-center text-silver/20"><ChevronRight size={32} /></div>
 
                 {/* DER: ASIGNADOS */}
-                <div className="flex-1 bg-yellow-50 rounded-xl shadow-sm border border-yellow-200 flex flex-col overflow-hidden">
-                    <div className="p-4 border-b border-yellow-200 bg-yellow-100/50">
-                        <h3 className="font-bold text-yellow-800 text-sm uppercase tracking-wide">Comité Técnico ({asignados.length})</h3>
+                <div className="flex-1 glass-panel rounded-2xl border border-orange/10 flex flex-col overflow-hidden shadow-2xl bg-orange/5">
+                    <div className="p-4 border-b border-orange/10 bg-orange/10">
+                        <h3 className="font-display font-black text-orange text-xs uppercase tracking-widest text-glow-orange flex items-center gap-2">Comité Técnico Asignado ({asignados.length})</h3>
                     </div>
                     <div className="flex-1 overflow-y-auto p-2 space-y-1">
                         {asignados.map(arb => (
-                            <div key={arb.id} className="flex items-center justify-between p-2 bg-white border border-yellow-100 rounded-lg group">
+                            <div key={arb.id} className="flex items-center justify-between p-2 bg-navy border border-white/5 rounded-xl group hover:border-orange/20 transition-all duration-200">
                                 <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-gray-100 overflow-hidden relative">
-                                        <ImagenLocal path={arb.foto_path} alt="" className="w-full h-full object-contain" />
+                                    <div className="w-8 h-8 rounded-full bg-navy border border-white/10 overflow-hidden relative shadow-inner flex items-center justify-center">
+                                        <ImagenLocal path={arb.foto_path} alt="" className="w-full h-full object-cover" />
                                     </div>
-                                    <span className="font-medium text-navy text-sm">{arb.nombre_deportivo}</span>
+                                    <span className="font-bold text-white group-hover:text-orange transition-colors text-sm">{arb.nombre_deportivo}</span>
                                 </div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => abrirEditar(arb)} className="p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 border rounded"><Edit size={14} /></button>
-                                    <button onClick={() => desasignar(arb.id)} className="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md"><X size={16} /></button>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                    <button onClick={() => abrirEditar(arb)} className="p-1.5 text-accent-blue hover:bg-white/5 rounded-lg bg-navy border border-white/5 transition-colors"><Edit size={14} /></button>
+                                    <button onClick={() => desasignar(arb.id)} className="text-red hover:bg-red/10 p-1.5 rounded-lg transition-colors"><X size={16} /></button>
                                 </div>
                             </div>
                         ))}
@@ -244,45 +258,45 @@ export default function DesignacionArbitros() {
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Árbitro" : "Nuevo Árbitro"}>
                 <div className="space-y-4">
                     <div className="flex items-center gap-4 mb-4">
-                        <div onClick={seleccionarFoto} className="w-20 h-20 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative">
-                            <ImagenLocal path={form.foto} alt="Foto" className="w-full h-full object-contain" />
-                            {!form.foto && <Upload size={20} className="text-gray-400" />}
+                        <div onClick={seleccionarFoto} className="w-20 h-20 rounded-full bg-navy-dark border border-white/10 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative shadow-inner">
+                            <ImagenLocal path={form.foto} alt="Foto" className="w-full h-full object-cover" />
+                            {!form.foto && <Upload size={20} className="text-silver/40" />}
                         </div>
                         <div className="flex-1">
-                            <label className="block text-xs font-bold text-navy mb-1">Nombre Deportivo (Auto)</label>
-                            <input value={form.apodo} onChange={e => setForm({ ...form, apodo: e.target.value })} className="w-full p-2 border rounded font-bold text-navy bg-gray-50" placeholder="Nombre + Apellidos" />
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre Deportivo (Auto)</label>
+                            <input value={form.apodo} onChange={e => setForm({ ...form, apodo: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl font-bold text-white outline-none focus:border-orange transition-colors" placeholder="Nombre + Apellidos" />
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">Nombre</label>
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre</label>
                             <input value={form.nombre} onChange={e => {
                                 const val = e.target.value; setForm(p => ({ ...p, nombre: val, apodo: `${val} ${p.apellidos}`.trim() }))
-                            }} className="w-full p-2 border rounded" />
+                            }} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold" />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">Apellidos</label>
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Apellidos</label>
                             <input value={form.apellidos} onChange={e => {
                                 const val = e.target.value; setForm(p => ({ ...p, apellidos: val, apodo: `${p.nombre} ${val}`.trim() }))
-                            }} className="w-full p-2 border rounded" />
+                            }} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold" />
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">Nacionalidad</label>
-                            <select value={form.pais1} onChange={e => setForm({ ...form, pais1: e.target.value })} className="w-full p-2 border rounded bg-white">
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nacionalidad</label>
+                            <select value={form.pais1} onChange={e => setForm({ ...form, pais1: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="">-- Seleccionar --</option>
                                 {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">F. Nacimiento</label>
-                            <input type="date" value={form.nacimiento} onChange={e => setForm({ ...form, nacimiento: e.target.value })} className="w-full p-2 border rounded" />
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">F. Nacimiento</label>
+                            <input type="date" value={form.nacimiento} onChange={e => setForm({ ...form, nacimiento: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold" />
                         </div>
                     </div>
-                    <div className="flex justify-end gap-2 pt-4 border-t">
-                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-500">Cancelar</button>
-                        <button onClick={guardarArbitro} className="bg-navy text-white px-4 py-2 rounded shadow">Guardar</button>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={guardarArbitro} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>

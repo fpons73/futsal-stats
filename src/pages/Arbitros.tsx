@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Eye, Filter, Gavel, Upload, X, Calendar } from "lucide-react";
 import Modal from "../components/Modal";
 import ImagenLocal from "../components/ImagenLocal";
+import { normalizeString } from "../utils/stringUtils";
 
 interface Pais {
     id: number;
@@ -164,37 +165,36 @@ export default function Arbitros() {
     }
 
     const arbitrosFiltrados = arbitros.filter(a => {
-        const texto = (a.nombre_deportivo + a.nombre + a.apellidos).toLowerCase();
-        const matchTexto = texto.includes(busqueda.toLowerCase());
+        const busquedaNorm = normalizeString(busqueda);
+        const textoNorm = normalizeString(a.nombre_deportivo + a.nombre + a.apellidos);
+        const matchTexto = textoNorm.includes(busquedaNorm);
         const matchPais = filtroPais === "todos" || a.nacionalidad_principal_id?.toString() === filtroPais;
         return matchTexto && matchPais;
-    });
-
-    return (
-        <div className="p-8 min-h-screen bg-gray-50 text-navy ml-0">
+    });    return (
+        <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
 
             {/* CABECERA */}
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 glass-panel p-5 rounded-2xl border border-white/5 shadow-2xl">
                 <div>
-                    <h1 className="text-3xl font-bold text-navy flex items-center gap-3">
-                        <Gavel className="text-orange" /> Árbitros
+                    <h1 className="text-2xl font-display font-black text-white flex items-center gap-3">
+                        <Gavel className="text-orange text-glow-orange animate-pulse" /> Árbitros
                     </h1>
-                    <p className="text-silver-dim mt-1">{arbitros.length} colegiados registrados</p>
+                    <p className="text-silver/50 text-sm mt-1">{arbitros.length} colegiados registrados en el sistema</p>
                 </div>
-                <button onClick={abrirCrear} className="bg-navy hover:bg-navy-light text-white px-6 py-2.5 rounded-lg font-medium shadow-md flex items-center gap-2">
+                <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     <Plus size={20} /> <span>Nuevo</span>
                 </button>
             </div>
 
             {/* FILTROS */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-wrap items-center gap-4">
-                <div className="flex-1 min-w-[200px] flex items-center gap-3 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
-                    <Search className="text-gray-400" size={20} />
-                    <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar árbitro..." className="bg-transparent outline-none w-full text-navy placeholder-gray-400" />
+            <div className="glass-panel p-4 rounded-xl border border-white/5 mb-6 flex flex-wrap items-center gap-4">
+                <div className="flex-1 min-w-[200px] flex items-center gap-3 bg-navy-light/60 px-3 py-2 rounded-xl border border-white/5">
+                    <Search className="text-silver/40" size={18} />
+                    <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar árbitro..." className="bg-transparent outline-none w-full text-white placeholder-silver/40 text-sm" />
                 </div>
                 <div className="flex items-center gap-2">
-                    <Filter size={20} className="text-gray-400" />
-                    <select value={filtroPais} onChange={e => setFiltroPais(e.target.value)} className="p-2 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-orange outline-none">
+                    <Filter size={18} className="text-silver/40" />
+                    <select value={filtroPais} onChange={e => setFiltroPais(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold">
                         <option value="todos">Todos los Países</option>
                         {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </select>
@@ -202,9 +202,9 @@ export default function Arbitros() {
             </div>
 
             {/* TABLA */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
                 <table className="w-full text-left">
-                    <thead className="bg-gray-50 text-gray-400 text-xs uppercase tracking-wider font-bold">
+                    <thead className="bg-navy-dark/85 border-b border-white/5 text-[10px] text-silver/40 uppercase tracking-widest font-black font-display">
                         <tr>
                             <th className="p-4 w-16 text-center">Foto</th>
                             <th className="p-4">Nombre Deportivo</th>
@@ -213,59 +213,59 @@ export default function Arbitros() {
                             <th className="p-4 text-right">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-white/5 text-silver/80">
                         {arbitrosFiltrados.map((a) => {
                             let nac2Id = null;
                             try { nac2Id = JSON.parse(a.nacionalidades_secundarias)[0]; } catch { }
 
                             return (
-                                <tr key={a.id} className="hover:bg-gray-50 transition-colors group">
+                                <tr key={a.id} className="hover:bg-white/5 transition-colors group duration-200">
                                     <td className="p-3 text-center">
-                                        <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 overflow-hidden mx-auto flex items-center justify-center">
+                                        <div className="w-10 h-10 rounded-full bg-navy border border-white/10 overflow-hidden mx-auto flex items-center justify-center shadow-inner">
                                             <ImagenLocal path={a.foto_path} alt={a.nombre_deportivo} className="w-full h-full object-cover" />
                                         </div>
                                     </td>
                                     <td className="p-4">
-                                        <div className="font-bold text-navy">{a.nombre_deportivo}</div>
-                                        <div className="text-xs text-gray-400">{a.nombre} {a.apellidos}</div>
+                                        <div className="font-bold text-white group-hover:text-orange transition-colors">{a.nombre_deportivo}</div>
+                                        <div className="text-xs text-silver/40 font-medium">{a.nombre} {a.apellidos}</div>
                                     </td>
                                     <td className="p-4 text-center">
-                                        <div className="flex justify-center gap-1">
-                                            {getBandera(a.nacionalidad_principal_id) && <img src={getBandera(a.nacionalidad_principal_id)!} className="w-6 h-4 border border-gray-200 shadow-sm" />}
-                                            {getBandera(nac2Id) && <img src={getBandera(nac2Id)!} className="w-6 h-4 border border-gray-200 shadow-sm opacity-80" />}
+                                        <div className="flex justify-center gap-1.5">
+                                            {getBandera(a.nacionalidad_principal_id) && <img src={getBandera(a.nacionalidad_principal_id)!} className="w-6 h-4 border border-white/10 shadow-sm rounded-sm" />}
+                                            {getBandera(nac2Id) && <img src={getBandera(nac2Id)!} className="w-6 h-4 border border-white/10 shadow-sm opacity-80 rounded-sm" />}
                                         </div>
                                     </td>
-                                    <td className="p-4 text-center font-mono text-sm text-gray-600">
+                                    <td className="p-4 text-center font-display font-bold text-sm text-white">
                                         {calcularEdad(a.fecha_nacimiento)}
                                     </td>
-                                    <td className="p-4 text-right flex justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => abrirFicha(a)} className="p-1.5 text-green-600 hover:bg-green-50 rounded bg-white border border-gray-200"><Eye size={16} /></button>
-                                        <button onClick={() => abrirEditar(a)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded bg-white border border-gray-200"><Edit size={16} /></button>
-                                        <button onClick={() => borrar(a.id)} className="p-1.5 text-red hover:bg-red-50 rounded bg-white border border-gray-200"><Trash2 size={16} /></button>
+                                    <td className="p-4 text-right flex justify-end gap-2 transition-opacity duration-300">
+                                        <button onClick={() => abrirFicha(a)} className="p-1.5 text-success hover:bg-white/5 rounded-lg bg-navy border border-white/5 transition-colors"><Eye size={16} /></button>
+                                        <button onClick={() => abrirEditar(a)} className="p-1.5 text-accent-blue hover:bg-white/5 rounded-lg bg-navy border border-white/5 transition-colors"><Edit size={16} /></button>
+                                        <button onClick={() => borrar(a.id)} className="p-1.5 text-red hover:bg-red/10 rounded-lg bg-navy border border-white/5 transition-colors"><Trash2 size={16} /></button>
                                     </td>
                                 </tr>
                             );
                         })}
                     </tbody>
                 </table>
-                {arbitrosFiltrados.length === 0 && <div className="p-10 text-center text-gray-400">No se encontraron árbitros.</div>}
+                {arbitrosFiltrados.length === 0 && <div className="p-12 text-center text-silver/30 font-semibold">No se encontraron árbitros registrados.</div>}
             </div>
 
             {/* --- MODAL FORMULARIO --- */}
             <Modal isOpen={modalFormOpen} onClose={() => setModalFormOpen(false)} title={editingId ? "Editar Árbitro" : "Nuevo Árbitro"}>
-                <div className="space-y-4">
+                <div className="space-y-4 text-white">
 
                     <div className="flex items-center gap-4 mb-4">
-                        <div onClick={seleccionarFoto} className="w-20 h-20 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative">
+                        <div onClick={seleccionarFoto} className="w-20 h-20 rounded-full bg-navy border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative shadow-inner shrink-0">
                             <ImagenLocal path={formData.foto} alt="Foto" className="w-full h-full object-cover" />
-                            {!formData.foto && <Upload size={20} className="text-gray-400" />}
+                            {!formData.foto && <Upload size={20} className="text-silver/40" />}
                         </div>
                         <div className="flex-1">
-                            <label className="block text-xs font-bold text-navy mb-1">Nombre Deportivo (Automático)</label>
+                            <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Nombre Deportivo (Automático)</label>
                             <input
                                 value={formData.apodo}
                                 onChange={e => setFormData({ ...formData, apodo: e.target.value })}
-                                className="w-full p-2 border rounded font-bold text-navy bg-gray-50"
+                                className="w-full p-2.5 border border-white/10 rounded-lg font-bold text-white bg-navy outline-none focus:ring-1 focus:ring-orange"
                                 placeholder="Nombre + Apellidos"
                             />
                         </div>
@@ -273,50 +273,48 @@ export default function Arbitros() {
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">Nombre</label>
+                            <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Nombre</label>
                             <input
                                 value={formData.nombre}
                                 onChange={e => {
                                     const val = e.target.value;
-                                    // Actualizamos nombre y también regeneramos el apodo
                                     setFormData(prev => ({
                                         ...prev,
                                         nombre: val,
                                         apodo: `${val} ${prev.apellidos}`.trim()
                                     }));
                                 }}
-                                className="w-full p-2 border rounded"
+                                className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white focus:ring-1 focus:ring-orange outline-none"
                             />
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">Apellidos</label>
+                            <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Apellidos</label>
                             <input
                                 value={formData.apellidos}
                                 onChange={e => {
                                     const val = e.target.value;
-                                    // Actualizamos apellidos y también regeneramos el apodo
                                     setFormData(prev => ({
                                         ...prev,
                                         apellidos: val,
                                         apodo: `${prev.nombre} ${val}`.trim()
                                     }));
                                 }}
-                                className="w-full p-2 border rounded"
+                                className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white focus:ring-1 focus:ring-orange outline-none"
                             />
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">1ª Nacionalidad</label>
-                            <select value={formData.pais1} onChange={e => setFormData({ ...formData, pais1: e.target.value })} className="w-full p-2 border rounded bg-white">
+                            <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">1ª Nacionalidad</label>
+                            <select value={formData.pais1} onChange={e => setFormData({ ...formData, pais1: e.target.value })} className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white cursor-pointer focus:ring-1 focus:ring-orange outline-none">
                                 <option value="">-- Seleccionar --</option>
                                 {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">2ª Nacionalidad</label>
-                            <select value={formData.pais2} onChange={e => setFormData({ ...formData, pais2: e.target.value })} className="w-full p-2 border rounded bg-white">
+                            <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">2ª Nacionalidad</label>
+                            <select value={formData.pais2} onChange={e => setFormData({ ...formData, pais2: e.target.value })} className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white cursor-pointer focus:ring-1 focus:ring-orange outline-none">
                                 <option value="">Ninguna</option>
                                 {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                             </select>
@@ -324,13 +322,13 @@ export default function Arbitros() {
                     </div>
 
                     <div>
-                        <label className="block text-xs font-bold text-navy mb-1">Fecha Nacimiento</label>
-                        <input type="date" value={formData.nacimiento} onChange={e => setFormData({ ...formData, nacimiento: e.target.value })} className="w-full p-2 border rounded" />
+                        <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Fecha Nacimiento</label>
+                        <input type="date" value={formData.nacimiento} onChange={e => setFormData({ ...formData, nacimiento: e.target.value })} className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white cursor-pointer focus:ring-1 focus:ring-orange outline-none" />
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-4 border-t">
-                        <button onClick={() => setModalFormOpen(false)} className="px-4 py-2 text-gray-500">Cancelar</button>
-                        <button onClick={guardar} className="bg-navy text-white px-6 py-2 rounded font-medium shadow-md">Guardar</button>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                        <button onClick={() => setModalFormOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
+                        <button onClick={guardar} className="bg-gradient-to-r from-orange to-orange-neon text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange">Guardar</button>
                     </div>
                 </div>
             </Modal>
@@ -338,41 +336,40 @@ export default function Arbitros() {
             {/* --- FICHA TÉCNICA ÁRBITRO --- */}
             {modalViewOpen && selectedRef && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
-                    <div className="bg-[#0B1F3B] w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden border border-white/10">
-                        <div className="relative p-8 flex items-center gap-6 border-b border-white/10 bg-gradient-to-r from-[#0B1F3B] to-[#16294a]">
-                            <button onClick={() => setModalViewOpen(false)} className="absolute top-4 right-4 text-white/50 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"><X size={24} /></button>
-                            <div className="w-24 h-24 rounded-full border-4 border-white/20 shadow-xl overflow-hidden bg-white/5 flex-shrink-0">
+                    <div className="bg-[#050f1e]/90 backdrop-blur-xl w-full max-w-2xl rounded-2xl shadow-glass overflow-hidden border border-white/10">
+                        <div className="relative p-8 flex items-center gap-6 border-b border-white/5 bg-gradient-to-r from-[#050f1e] to-[#0D1E36]">
+                            <button onClick={() => setModalViewOpen(false)} className="absolute top-4 right-4 text-white/50 hover:text-white p-1.5 rounded-full hover:bg-white/10 transition-colors"><X size={20} /></button>
+                            <div className="w-24 h-24 rounded-full border-4 border-white/10 shadow-2xl overflow-hidden bg-white/5 flex-shrink-0">
                                 <ImagenLocal path={selectedRef.foto_path} alt={selectedRef.nombre_deportivo} className="w-full h-full object-cover" />
                             </div>
                             <div>
-                                <h2 className="text-3xl font-bold text-white mb-1">{selectedRef.nombre_deportivo}</h2>
-                                <span className="bg-yellow-500 text-black text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider mb-2 inline-block">Árbitro</span>
-                                <p className="text-white/60 text-sm mb-3">{selectedRef.nombre} {selectedRef.apellidos}</p>
+                                <h2 className="text-3xl font-display font-extrabold text-white mb-1 text-glow-orange">{selectedRef.nombre_deportivo}</h2>
+                                <span className="bg-orange text-white text-[9px] font-black px-2 py-0.5 rounded-md uppercase tracking-wider mb-2.5 inline-block shadow-md">Árbitro</span>
+                                <p className="text-silver/50 text-sm mb-3 font-semibold">{selectedRef.nombre} {selectedRef.apellidos}</p>
 
                                 <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full border border-white/5">
-                                        {getBandera(selectedRef.nacionalidad_principal_id) && <img src={getBandera(selectedRef.nacionalidad_principal_id)!} className="w-5 h-3.5" />}
-                                        <span className="text-xs text-white font-medium uppercase tracking-wide">{getNombrePais(selectedRef.nacionalidad_principal_id)}</span>
+                                    <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/5">
+                                        {getBandera(selectedRef.nacionalidad_principal_id) && <img src={getBandera(selectedRef.nacionalidad_principal_id)!} className="w-5 h-3.5 rounded-sm" />}
+                                        <span className="text-[10px] text-white font-bold uppercase tracking-wider">{getNombrePais(selectedRef.nacionalidad_principal_id)}</span>
                                     </div>
-                                    <div className="flex items-center gap-2 bg-white/10 px-3 py-1 rounded-full border border-white/5">
-                                        <Calendar size={14} className="text-white/70" />
-                                        <span className="text-xs text-white font-medium">{selectedRef.fecha_nacimiento}</span>
+                                    <div className="flex items-center gap-2 bg-white/5 px-3 py-1 rounded-full border border-white/5 text-silver/70">
+                                        <Calendar size={14} className="text-orange animate-pulse" />
+                                        <span className="text-[10px] text-white font-bold">{selectedRef.fecha_nacimiento}</span>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         {/* Historial (Mockup) */}
-                        <div className="p-6 bg-[#0B1F3B]">
-                            <h4 className="text-xs font-bold text-white/50 uppercase mb-4 flex items-center gap-2">Historial de Arbitraje</h4>
-                            <div className="bg-white/5 rounded-lg p-4 border border-white/5 text-center text-white/30 text-xs">
+                        <div className="p-6 bg-transparent">
+                            <h4 className="text-[10px] font-black text-silver/40 uppercase tracking-widest mb-4 flex items-center gap-2">Historial de Arbitraje</h4>
+                            <div className="bg-white/5 rounded-xl p-6 border border-white/5 text-center text-silver/30 text-xs font-semibold">
                                 Partidos arbitrados próximamente...
                             </div>
                         </div>
                     </div>
                 </div>
             )}
-
         </div>
     );
 }

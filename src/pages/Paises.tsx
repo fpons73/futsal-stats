@@ -7,7 +7,6 @@ import { join } from "@tauri-apps/api/path"; // Para unir rutas de carpetas
 import Papa from "papaparse"; // El lector de CSV
 import { Search, Upload, Plus, Trash2, Edit, Flag, FileSpreadsheet } from "lucide-react";
 import Modal from "../components/Modal";
-import ImagenLocal from "../components/ImagenLocal";
 
 interface Pais {
     id: number;
@@ -117,17 +116,35 @@ export default function Paises() {
     }
 
     // --- LÓGICA CRUD MANUAL ---
+    async function seleccionarBanderaManual() {
+        try {
+            const file = await open({
+                multiple: false,
+                filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
+            });
+            if (file) setForm({ ...form, bandera: file as string });
+        } catch (err) { console.error(err); }
+    }
+
     async function guardarManual() {
+        if (!form.nombre || !form.iso2 || !form.iso3) {
+            alert("Nombre e ISOs son obligatorios");
+            return;
+        }
+
         const db = await Database.load("sqlite:globalfutsal.db");
+        const iso2 = form.iso2.toUpperCase();
+        const iso3 = form.iso3.toUpperCase();
+
         if (editId) {
             await db.execute(
-                "UPDATE Pais SET nombre=$1, codigo_iso2=$2, codigo_iso3=$3, confederacion_id=$4 WHERE id=$5",
-                [form.nombre, form.iso2, form.iso3, form.conf_id || null, editId]
+                "UPDATE Pais SET nombre=$1, codigo_iso2=$2, codigo_iso3=$3, confederacion_id=$4, bandera_path=$5 WHERE id=$6",
+                [form.nombre, iso2, iso3, form.conf_id || null, form.bandera || null, editId]
             );
         } else {
             await db.execute(
-                "INSERT INTO Pais (nombre, codigo_iso2, codigo_iso3, confederacion_id) VALUES ($1, $2, $3, $4)",
-                [form.nombre, form.iso2, form.iso3, form.conf_id || null]
+                "INSERT INTO Pais (nombre, codigo_iso2, codigo_iso3, confederacion_id, bandera_path) VALUES ($1, $2, $3, $4, $5)",
+                [form.nombre, iso2, iso3, form.conf_id || null, form.bandera || null]
             );
         }
         cerrarModal();
@@ -162,52 +179,52 @@ export default function Paises() {
     );
 
     return (
-        <div className="p-8 min-h-screen bg-gray-50 text-navy ml-0">
+        <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
 
             {/* CABECERA */}
-            <div className="flex justify-between items-end mb-8">
+            <div className="flex justify-between items-center mb-8 glass-panel p-5 rounded-2xl border border-white/5 shadow-2xl">
                 <div>
-                    <h1 className="text-3xl font-bold text-navy flex items-center gap-3">
-                        <Flag className="text-orange" /> Países
+                    <h1 className="text-2xl font-display font-black text-white flex items-center gap-3">
+                        <Flag className="text-orange text-glow-orange animate-pulse" /> Países
                     </h1>
-                    <p className="text-silver-dim mt-1">Base de datos de naciones y banderas.</p>
+                    <p className="text-silver/50 text-sm mt-1">Base de datos de naciones y banderas en el sistema</p>
                 </div>
                 <div className="flex gap-3">
                     {/* BOTÓN DE IMPORTAR CSV */}
                     <button
                         onClick={importarCSV}
                         disabled={loading}
-                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-lg font-medium shadow-md flex items-center gap-2 transition-transform active:scale-95"
+                        className="bg-navy-light hover:bg-navy-light/80 text-white px-4 py-2.5 rounded-xl font-bold shadow-md border border-white/5 flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]"
                     >
-                        <FileSpreadsheet size={20} />
-                        <span>{loading ? "Importando..." : "Importar CSV + Banderas"}</span>
+                        <FileSpreadsheet size={20} className="text-orange" />
+                        <span>{loading ? "Importando..." : "Importar CSV"}</span>
                     </button>
 
-                    <button onClick={() => setIsModalOpen(true)} className="bg-navy hover:bg-navy-light text-white px-4 py-2.5 rounded-lg font-medium shadow-md flex items-center gap-2">
+                    <button onClick={() => setIsModalOpen(true)} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                         <Plus size={20} /> <span>Nuevo</span>
                     </button>
                 </div>
             </div>
 
             {/* BARRA DE BÚSQUEDA */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex items-center gap-3">
-                <Search className="text-gray-400" />
+            <div className="glass-panel p-4 rounded-xl border border-white/5 mb-6 flex items-center gap-3">
+                <Search className="text-silver/40" size={18} />
                 <input
                     type="text"
                     placeholder="Buscar país por nombre o código ISO..."
-                    className="w-full outline-none text-navy placeholder-gray-400"
+                    className="bg-transparent outline-none w-full text-white placeholder-silver/40 text-sm"
                     value={busqueda}
                     onChange={(e) => setBusqueda(e.target.value)}
                 />
-                <div className="text-sm text-gray-400 font-medium">
+                <div className="text-xs text-silver/40 font-bold uppercase tracking-wider">
                     {paisesFiltrados.length} registros
                 </div>
             </div>
 
             {/* TABLA DE PAÍSES */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
                 <table className="w-full text-left">
-                    <thead className="bg-navy-dark text-silver text-xs uppercase tracking-wider">
+                    <thead className="bg-navy-dark/85 border-b border-white/5 text-[10px] text-silver/40 uppercase tracking-widest font-black font-display">
                         <tr>
                             <th className="p-4 w-16">Bandera</th>
                             <th className="p-4">Nombre</th>
@@ -216,62 +233,80 @@ export default function Paises() {
                             <th className="p-4 w-24 text-right">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-white/5 text-silver/80">
                         {paisesFiltrados.map(pais => (
-                            <tr key={pais.id} className="hover:bg-gray-50 transition-colors">
+                            <tr key={pais.id} className="hover:bg-white/5 transition-colors group duration-200">
                                 <td className="p-4">
-                                    <div className="w-10 h-7 rounded border border-gray-200 overflow-hidden bg-gray-100 flex items-center justify-center">
-                                        {/* Usamos convertFileSrc para ver la bandera local */}
+                                    <div className="w-10 h-7 rounded border border-white/10 overflow-hidden bg-navy flex items-center justify-center shadow-inner">
                                         {pais.bandera_path ? (
                                             <img src={convertFileSrc(pais.bandera_path)} className="w-full h-full object-cover" />
                                         ) : (
-                                            <span className="text-[10px] text-gray-400">N/A</span>
+                                            <span className="text-[10px] text-silver/40 font-bold">N/A</span>
                                         )}
                                     </div>
                                 </td>
-                                <td className="p-4 font-medium text-navy">{pais.nombre}</td>
+                                <td className="p-4 font-bold text-white group-hover:text-orange transition-colors">{pais.nombre}</td>
                                 <td className="p-4">
-                                    <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold">{pais.codigo_iso3}</span>
+                                    <span className="bg-orange/10 text-orange border border-orange/20 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{pais.codigo_iso3}</span>
                                 </td>
-                                <td className="p-4 text-sm text-gray-500">
+                                <td className="p-4 text-sm font-bold text-white/70">
                                     {confederaciones.find(c => c.id === pais.confederacion_id)?.codigo || "-"}
                                 </td>
-                                <td className="p-4 text-right flex justify-end gap-2">
-                                    <button onClick={() => abrirEditar(pais)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Edit size={16} /></button>
-                                    <button onClick={() => borrar(pais.id)} className="p-1.5 text-red hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                <td className="p-4 text-right flex justify-end gap-2 transition-opacity duration-300">
+                                    <button onClick={() => abrirEditar(pais)} className="p-1.5 text-accent-blue hover:bg-white/5 rounded-lg bg-navy border border-white/5 transition-colors"><Edit size={16} /></button>
+                                    <button onClick={() => borrar(pais.id)} className="p-1.5 text-red hover:bg-red/10 rounded-lg bg-navy border border-white/5 transition-colors"><Trash2 size={16} /></button>
                                 </td>
                             </tr>
                         ))}
                     </tbody>
                 </table>
                 {paisesFiltrados.length === 0 && (
-                    <div className="p-8 text-center text-gray-400">No se encontraron países.</div>
+                    <div className="p-8 text-center text-silver/40 font-medium">No se encontraron países.</div>
                 )}
             </div>
 
             {/* MODAL EDICIÓN MANUAL */}
             <Modal isOpen={isModalOpen} onClose={cerrarModal} title={editId ? "Editar País" : "Nuevo País"}>
                 <div className="space-y-4">
+                    <div className="flex flex-col items-center mb-2">
+                        <label className="text-xs font-bold text-silver/50 mb-2 uppercase tracking-wider">Bandera</label>
+                        <div
+                            onClick={seleccionarBanderaManual}
+                            className="w-24 h-16 rounded-xl border border-white/10 hover:border-orange cursor-pointer flex items-center justify-center bg-navy-dark overflow-hidden relative group shadow-inner"
+                        >
+                            {form.bandera ? (
+                                <img src={convertFileSrc(form.bandera)} className="w-full h-full object-cover" />
+                            ) : (
+                                <div className="text-center text-silver/40">
+                                    <Flag size={24} className="mx-auto mb-1 text-silver/30" />
+                                    <span className="text-[10px] uppercase font-bold tracking-wider">Cargar PNG</span>
+                                </div>
+                            )}
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                                <Upload size={20} className="text-white" />
+                            </div>
+                        </div>
+                    </div>
                     <div>
-                        <label className="block text-sm font-bold text-navy mb-1">Nombre</label>
-                        <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className="w-full p-2 border rounded" />
+                        <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre</label>
+                        <input value={form.nombre} onChange={e => setForm({ ...form, nombre: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-bold text-navy mb-1">ISO 2 (ej: ES)</label>
-                            <input value={form.iso2} onChange={e => setForm({ ...form, iso2: e.target.value })} className="w-full p-2 border rounded uppercase" maxLength={2} />
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">ISO 2 (ej: ES)</label>
+                            <input value={form.iso2} onChange={e => setForm({ ...form, iso2: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors uppercase font-bold text-center" maxLength={2} />
                         </div>
                         <div>
-                            <label className="block text-sm font-bold text-navy mb-1">ISO 3 (ej: ESP)</label>
-                            <input value={form.iso3} onChange={e => setForm({ ...form, iso3: e.target.value })} className="w-full p-2 border rounded uppercase" maxLength={3} />
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">ISO 3 (ej: ESP)</label>
+                            <input value={form.iso3} onChange={e => setForm({ ...form, iso3: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors uppercase font-bold text-center" maxLength={3} />
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-navy mb-1">Confederación</label>
+                        <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Confederación</label>
                         <select
                             value={form.conf_id}
                             onChange={e => setForm({ ...form, conf_id: e.target.value })}
-                            className="w-full p-2 border rounded bg-white"
+                            className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer"
                         >
                             <option value="">-- Sin asignar --</option>
                             {confederaciones.map(c => (
@@ -279,9 +314,9 @@ export default function Paises() {
                             ))}
                         </select>
                     </div>
-                    <div className="flex justify-end gap-3 pt-4">
-                        <button onClick={cerrarModal} className="px-4 py-2 text-gray-500">Cancelar</button>
-                        <button onClick={guardarManual} className="bg-navy text-white px-6 py-2 rounded">Guardar</button>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                        <button onClick={cerrarModal} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={guardarManual} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>

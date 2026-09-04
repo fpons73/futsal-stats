@@ -123,17 +123,17 @@ export default function Confederaciones() {
     }
 
     return (
-        <div className="p-8 min-h-screen bg-gray-50 text-navy ml-0">
+        <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
 
             {/* CABECERA */}
-            <div className="flex justify-between items-center mb-8">
+            <div className="flex justify-between items-center mb-8 glass-panel p-5 rounded-2xl border border-white/5 shadow-2xl">
                 <div>
-                    <h1 className="text-3xl font-bold text-navy flex items-center gap-3">
-                        <Globe className="text-purple" /> Confederaciones
+                    <h1 className="text-2xl font-display font-black text-white flex items-center gap-3">
+                        <Globe className="text-orange text-glow-orange animate-pulse" /> Confederaciones
                     </h1>
-                    <p className="text-silver-dim mt-1">Organismos rectores del fútbol mundial.</p>
+                    <p className="text-silver/50 text-sm mt-1">Organismos rectores del fútbol sala mundial en el sistema</p>
                 </div>
-                <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-lg font-semibold shadow-md flex items-center gap-2 transition-transform hover:scale-105">
+                <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     <Plus size={20} /> <span>Nueva</span>
                 </button>
             </div>
@@ -141,42 +141,42 @@ export default function Confederaciones() {
             {/* REJILLA DE TARJETAS */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {data.map((conf) => (
-                    <div key={conf.id} className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all flex flex-col items-center text-center relative group">
+                    <div key={conf.id} className="glass-panel p-8 rounded-2xl border border-white/5 hover:border-white/10 hover:shadow-2xl transition-all duration-300 flex flex-col items-center text-center relative group">
 
                         {/* Logo Circular */}
-                        <div className="w-24 h-24 mb-4 rounded-full bg-gray-50 flex items-center justify-center border border-gray-100 shadow-inner overflow-hidden p-2 relative">
+                        <div className="w-24 h-24 mb-4 rounded-full bg-navy-dark flex items-center justify-center border border-white/10 shadow-inner overflow-hidden p-2 relative">
                             {conf.logo_path ? (
                                 <img
                                     src={convertFileSrc(conf.logo_path)}
                                     alt={conf.codigo}
-                                    className="w-full h-full object-contain"
+                                    className="w-full h-full object-contain filter drop-shadow-lg"
                                     onError={(e) => {
                                         e.currentTarget.style.display = 'none';
-                                        e.currentTarget.parentElement?.classList.add('bg-red-50');
+                                        e.currentTarget.parentElement?.classList.add('bg-navy-dark');
                                     }}
                                 />
                             ) : (
-                                <Globe size={40} className="text-gray-300" />
+                                <Globe size={40} className="text-silver/20" />
                             )}
                         </div>
 
-                        <h2 className="text-2xl font-black text-navy mb-1">{conf.codigo}</h2>
-                        <p className="text-sm text-silver-dim font-medium leading-tight h-10 flex items-center justify-center">
+                        <h2 className="text-2xl font-display font-black text-white group-hover:text-orange transition-colors mb-1">{conf.codigo}</h2>
+                        <p className="text-xs text-silver/50 font-bold uppercase tracking-wider leading-tight h-10 flex items-center justify-center">
                             {conf.nombre}
                         </p>
 
                         {/* BOTONES FLOTANTES (EDITAR Y BORRAR) */}
-                        <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 p-1 rounded-lg shadow-sm backdrop-blur-sm">
+                        <div className="absolute top-3 right-3 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-navy-dark/90 p-1 rounded-xl border border-white/5 shadow-2xl backdrop-blur-sm">
                             <button
                                 onClick={() => abrirEditar(conf)}
-                                className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-md transition-colors"
+                                className="p-1.5 text-accent-blue hover:bg-white/5 rounded-lg transition-colors"
                                 title="Editar"
                             >
                                 <Edit size={16} />
                             </button>
                             <button
                                 onClick={() => borrar(conf.id)}
-                                className="p-1.5 text-red hover:bg-red-50 rounded-md transition-colors"
+                                className="p-1.5 text-red hover:bg-red/10 rounded-lg transition-colors"
                                 title="Eliminar"
                             >
                                 <Trash2 size={16} />
@@ -197,49 +197,49 @@ export default function Confederaciones() {
                     <div className="flex flex-col items-center justify-center">
                         <div
                             onClick={seleccionarLogo}
-                            className="w-32 h-32 rounded-full border-2 border-dashed border-gray-300 hover:border-orange cursor-pointer flex items-center justify-center transition-colors relative overflow-hidden bg-gray-50 group"
+                            className="w-32 h-32 rounded-full border border-white/10 hover:border-orange cursor-pointer flex items-center justify-center transition-colors relative overflow-hidden bg-navy-dark group shadow-inner"
                         >
                             {logoPath ? (
                                 <img src={convertFileSrc(logoPath)} className="w-full h-full object-contain p-2" />
                             ) : (
-                                <div className="text-center text-gray-400 group-hover:text-orange transition-colors">
-                                    <Upload size={32} className="mx-auto mb-2" />
-                                    <span className="text-xs font-medium">Subir Logo</span>
+                                <div className="text-center text-silver/40 group-hover:text-orange transition-colors">
+                                    <Upload size={32} className="mx-auto mb-2 text-silver/30" />
+                                    <span className="text-xs font-bold uppercase tracking-wider">Subir Logo</span>
                                 </div>
                             )}
                         </div>
                         {logoPath && (
-                            <button onClick={() => setLogoPath(null)} className="text-xs text-red mt-2 hover:underline flex items-center gap-1">
+                            <button onClick={() => setLogoPath(null)} className="text-xs text-red mt-2 hover:underline flex items-center gap-1 font-bold">
                                 <X size={12} /> Quitar logo
                             </button>
                         )}
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-navy mb-1">Nombre Completo</label>
+                        <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre Completo</label>
                         <input
                             value={nombre}
                             onChange={e => setNombre(e.target.value)}
                             placeholder="Ej: Unión de Asociaciones Europeas..."
-                            className="w-full p-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange outline-none text-navy"
+                            className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold"
                         />
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-navy mb-1">Código (Siglas)</label>
+                        <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Código (Siglas)</label>
                         <input
                             value={codigo}
                             onChange={e => setCodigo(e.target.value)}
                             placeholder="Ej: UEFA"
-                            className="w-full p-2.5 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange outline-none font-bold uppercase text-navy"
+                            className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-display font-black uppercase text-center"
                         />
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-100 mt-4">
-                        <button onClick={cerrarModal} className="px-4 py-2 text-gray-500 hover:text-navy hover:bg-gray-100 rounded-lg transition-colors">
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5 mt-4">
+                        <button onClick={cerrarModal} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">
                             Cancelar
                         </button>
-                        <button onClick={guardar} className="bg-navy hover:bg-navy-light text-white px-6 py-2 rounded-lg font-medium shadow-lg transition-transform active:scale-95">
+                        <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                             {editingId ? "Guardar Cambios" : "Crear Confederación"}
                         </button>
                     </div>

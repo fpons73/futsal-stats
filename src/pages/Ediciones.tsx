@@ -16,6 +16,7 @@ interface EdicionDisplay {
     puntos_derrota: number;
     competicion_id: number;
     temporada_id: number;
+    nombre: string | null;
 }
 
 interface SelectorData {
@@ -36,6 +37,7 @@ export default function Ediciones() {
     const [ptsVictoria, setPtsVictoria] = useState(3);
     const [ptsEmpate, setPtsEmpate] = useState(1);
     const [ptsDerrota, setPtsDerrota] = useState(0);
+    const [nombreEdicion, setNombreEdicion] = useState("");
 
     useEffect(() => { cargarDatos(); }, []);
 
@@ -44,7 +46,7 @@ export default function Ediciones() {
             const db = await Database.load("sqlite:globalfutsal.db");
             const query = `
         SELECT e.id, c.nombre as competicion_nombre, c.logo_path as competicion_logo, t.nombre as temporada_nombre,
-          e.puntos_victoria, e.puntos_empate, e.puntos_derrota, e.competicion_id, e.temporada_id
+          e.puntos_victoria, e.puntos_empate, e.puntos_derrota, e.competicion_id, e.temporada_id, e.nombre
         FROM Edicion e
         JOIN Competicion c ON e.competicion_id = c.id
         JOIN Temporada t ON e.temporada_id = t.id
@@ -64,6 +66,7 @@ export default function Ediciones() {
     function abrirCrear() {
         setEditingId(null);
         setSelCompeticion(""); setSelTemporada(""); setPtsVictoria(3); setPtsEmpate(1); setPtsDerrota(0);
+        setNombreEdicion("");
         setIsModalOpen(true);
     }
 
@@ -72,6 +75,7 @@ export default function Ediciones() {
         setSelCompeticion(e.competicion_id.toString());
         setSelTemporada(e.temporada_id.toString());
         setPtsVictoria(e.puntos_victoria); setPtsEmpate(e.puntos_empate); setPtsDerrota(e.puntos_derrota);
+        setNombreEdicion(e.nombre || "");
         setIsModalOpen(true);
     }
 
@@ -84,15 +88,14 @@ export default function Ediciones() {
             const db = await Database.load("sqlite:globalfutsal.db");
             if (editingId) {
                 await db.execute(
-                    `UPDATE Edicion SET competicion_id=$1, temporada_id=$2, puntos_victoria=$3, puntos_empate=$4, puntos_derrota=$5 WHERE id=$6`,
-                    [selCompeticion, selTemporada, ptsVictoria, ptsEmpate, ptsDerrota, editingId]
+                    `UPDATE Edicion SET competicion_id=$1, temporada_id=$2, puntos_victoria=$3, puntos_empate=$4, puntos_derrota=$5, nombre=$6 WHERE id=$7`,
+                    [selCompeticion, selTemporada, ptsVictoria, ptsEmpate, ptsDerrota, nombreEdicion, editingId]
                 );
             } else {
-                const existe = await db.select<any[]>("SELECT id FROM Edicion WHERE competicion_id = $1 AND temporada_id = $2", [selCompeticion, selTemporada]);
-                if (existe.length > 0) { alert("¡Esta edición ya existe!"); return; }
+                // Quitamos la restricción de duplicados por Competición+Temporada para permitir varias ediciones de la misma Euro
                 await db.execute(
-                    `INSERT INTO Edicion (competicion_id, temporada_id, puntos_victoria, puntos_empate, puntos_derrota) VALUES ($1, $2, $3, $4, $5)`,
-                    [selCompeticion, selTemporada, ptsVictoria, ptsEmpate, ptsDerrota]
+                    `INSERT INTO Edicion (competicion_id, temporada_id, puntos_victoria, puntos_empate, puntos_derrota, nombre) VALUES ($1, $2, $3, $4, $5, $6)`,
+                    [selCompeticion, selTemporada, ptsVictoria, ptsEmpate, ptsDerrota, nombreEdicion]
                 );
             }
             setIsModalOpen(false);
@@ -110,78 +113,92 @@ export default function Ediciones() {
     }
 
     return (
-        <div className="p-8 min-h-screen bg-gray-50 text-navy ml-0">
+        <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
 
-            <div className="flex justify-between items-center mb-8">
+            {/* CABECERA */}
+            <div className="flex justify-between items-center mb-8 glass-panel p-5 rounded-2xl border border-white/5 shadow-2xl">
                 <div>
-                    <h1 className="text-3xl font-bold text-navy flex items-center gap-3"><Layers className="text-orange" /> Ediciones</h1>
-                    <p className="text-silver-dim mt-1">Vincula competiciones con temporadas.</p>
+                    <h1 className="text-2xl font-display font-black text-white flex items-center gap-3"><Layers className="text-orange text-glow-orange animate-pulse" /> Ediciones</h1>
+                    <p className="text-silver/50 text-sm mt-1">Vincula competiciones con temporadas en el sistema</p>
                 </div>
-                <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-lg font-semibold shadow-md flex items-center gap-2 hover:scale-105 transition-transform">
+                <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     <Plus size={20} /> <span>Nueva Edición</span>
                 </button>
             </div>
 
+            {/* REJILLA DE TARJETAS */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {ediciones.map((ed) => (
-                    <div key={ed.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all flex items-center justify-between group">
+                    <div key={ed.id} className="glass-panel p-5 rounded-2xl border border-white/5 hover:border-white/10 hover:shadow-2xl transition-all duration-300 flex items-center justify-between group">
                         <div className="flex items-center gap-4">
-                            <div className="w-14 h-14 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center p-1 overflow-hidden shrink-0">
-                                {/* AQUI ESTÁ EL CAMBIO A convertFileSrc */}
+                            <div className="w-14 h-14 rounded-xl bg-navy-dark border border-white/10 flex items-center justify-center p-1 overflow-hidden shrink-0 shadow-inner">
                                 {ed.competicion_logo ? (
-                                    <img src={convertFileSrc(ed.competicion_logo)} alt={ed.competicion_nombre} className="w-full h-full object-contain" />
+                                    <img src={convertFileSrc(ed.competicion_logo)} alt={ed.competicion_nombre} className="w-full h-full object-contain filter drop-shadow-md" />
                                 ) : (
-                                    <Trophy className="text-gray-300" />
+                                    <Trophy className="text-silver/20 animate-pulse" />
                                 )}
                             </div>
                             <div>
-                                <h3 className="font-bold text-navy text-lg">{ed.competicion_nombre}</h3>
+                                <h3 className="font-bold text-white text-lg group-hover:text-orange transition-colors">
+                                    {ed.competicion_nombre}
+                                    {ed.nombre && <span className="text-silver/40 font-normal ml-2">- {ed.nombre}</span>}
+                                </h3>
                                 <div className="flex items-center gap-2 mt-1">
-                                    <span className="bg-purple/10 text-purple text-xs font-bold px-2 py-0.5 rounded uppercase">{ed.temporada_nombre}</span>
-                                    <span className="text-[10px] text-gray-400 border px-1.5 rounded" title="Sistema de Puntuación (V/E/D)">Pts: {ed.puntos_victoria}/{ed.puntos_empate}/{ed.puntos_derrota}</span>
+                                    <span className="bg-orange/10 text-orange border border-orange/20 text-[10px] font-black px-2 py-0.5 rounded uppercase tracking-wider">{ed.temporada_nombre}</span>
+                                    <span className="text-[10px] text-silver/40 border border-white/5 px-1.5 py-0.5 rounded-md font-bold" title="Sistema de Puntuación (V/E/D)">Pts: {ed.puntos_victoria}/{ed.puntos_empate}/{ed.puntos_derrota}</span>
                                 </div>
                             </div>
                         </div>
-                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => abrirEditar(ed)} className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"><Edit size={18} /></button>
-                            <button onClick={() => borrar(ed.id)} className="p-2 text-red hover:bg-red-50 rounded-lg"><Trash2 size={18} /></button>
+                        <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-navy-dark/95 p-1 rounded-xl border border-white/5 shadow-2xl backdrop-blur-sm">
+                            <button onClick={() => abrirEditar(ed)} className="p-2 text-accent-blue hover:bg-white/5 rounded-lg transition-colors"><Edit size={18} /></button>
+                            <button onClick={() => borrar(ed.id)} className="p-2 text-red hover:bg-red/10 rounded-lg transition-colors"><Trash2 size={18} /></button>
                         </div>
                     </div>
                 ))}
-                {ediciones.length === 0 && <div className="col-span-full p-10 text-center text-gray-400 border-2 border-dashed rounded-xl">No hay ediciones creadas.</div>}
+                {ediciones.length === 0 && <div className="col-span-full p-10 text-center text-silver/40 font-medium border border-white/5 bg-navy-dark/40 rounded-2xl shadow-inner">No hay ediciones creadas.</div>}
             </div>
 
+            {/* MODAL */}
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Edición" : "Nueva Edición"}>
                 <div className="space-y-5">
                     <div className="grid grid-cols-1 gap-4">
                         <div>
-                            <label className="block text-sm font-bold text-navy mb-1">Competición</label>
-                            <select value={selCompeticion} onChange={e => setSelCompeticion(e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-orange outline-none">
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre Personalizado (Opcional)</label>
+                            <input
+                                value={nombreEdicion}
+                                onChange={e => setNombreEdicion(e.target.value)}
+                                placeholder="Ej: Fase de Clasificación, Ronda Final..."
+                                className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Competición</label>
+                            <select value={selCompeticion} onChange={e => setSelCompeticion(e.target.value)} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="">-- Seleccionar --</option>
                                 {competiciones.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-bold text-navy mb-1">Temporada</label>
-                            <select value={selTemporada} onChange={e => setSelTemporada(e.target.value)} className="w-full p-2.5 border border-gray-300 rounded-lg bg-white focus:ring-2 focus:ring-orange outline-none">
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Temporada</label>
+                            <select value={selTemporada} onChange={e => setSelTemporada(e.target.value)} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="">-- Seleccionar --</option>
                                 {temporadas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}
                             </select>
                         </div>
                     </div>
 
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <h4 className="text-xs font-bold text-gray-400 uppercase mb-3 flex items-center gap-2"><Save size={12} /> Sistema de Puntuación</h4>
+                    <div className="bg-navy-dark/40 p-4 rounded-xl border border-white/5">
+                        <h4 className="text-xs font-bold text-silver/40 uppercase mb-3 flex items-center gap-2"><Save size={12} /> Sistema de Puntuación</h4>
                         <div className="grid grid-cols-3 gap-3">
-                            <div><label className="block text-xs font-semibold text-navy mb-1">Victoria</label><input type="number" value={ptsVictoria} onChange={e => setPtsVictoria(parseInt(e.target.value))} className="w-full p-2 border rounded text-center font-bold text-green-600" /></div>
-                            <div><label className="block text-xs font-semibold text-navy mb-1">Empate</label><input type="number" value={ptsEmpate} onChange={e => setPtsEmpate(parseInt(e.target.value))} className="w-full p-2 border rounded text-center font-bold text-blue-600" /></div>
-                            <div><label className="block text-xs font-semibold text-navy mb-1">Derrota</label><input type="number" value={ptsDerrota} onChange={e => setPtsDerrota(parseInt(e.target.value))} className="w-full p-2 border rounded text-center font-bold text-red-600" /></div>
+                            <div><label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Victoria</label><input type="number" value={ptsVictoria} onChange={e => setPtsVictoria(parseInt(e.target.value))} className="w-full p-2 bg-navy border border-white/10 rounded-xl text-center font-display font-black text-success outline-none focus:border-orange" /></div>
+                            <div><label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Empate</label><input type="number" value={ptsEmpate} onChange={e => setPtsEmpate(parseInt(e.target.value))} className="w-full p-2 bg-navy border border-white/10 rounded-xl text-center font-display font-black text-accent-blue outline-none focus:border-orange" /></div>
+                            <div><label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Derrota</label><input type="number" value={ptsDerrota} onChange={e => setPtsDerrota(parseInt(e.target.value))} className="w-full p-2 bg-navy border border-white/10 rounded-xl text-center font-display font-black text-red outline-none focus:border-orange" /></div>
                         </div>
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded">Cancelar</button>
-                        <button onClick={guardar} className="bg-navy text-white px-6 py-2 rounded font-medium shadow-md">{editingId ? "Guardar Cambios" : "Crear Edición"}</button>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5 mt-4">
+                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">{editingId ? "Guardar Cambios" : "Crear Edición"}</button>
                     </div>
                 </div>
             </Modal>

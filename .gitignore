@@ -22,3 +22,20 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Database
+*.db
+*.db-journal
+
+# WorkBuddy
+.workbuddy-ai/
+.freebuff/
+
+# Data files
+Futsal_Data/
+*.csv
+*.pdf
+calendario_texto.txt
+
+# Build artifacts
+src-tauri/target/

@@ -1,5 +1,5 @@
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { User, Globe, ImageOff } from "lucide-react";
+import { User } from "lucide-react";
 
 interface Props {
     path: string | null;

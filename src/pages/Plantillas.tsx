@@ -4,6 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Shirt, Plus, Trash2, Edit, Search, User, Briefcase, ChevronRight, Download, Upload } from "lucide-react";
 import Modal from "../components/Modal";
+import { normalizeString } from "../utils/stringUtils";
 
 // Definición de posiciones de Futsal
 const POSICIONES = ["Portero", "Cierre", "Ala", "Pívot", "Universal"];
@@ -113,7 +114,7 @@ export default function Plantillas() {
     async function cargarEdiciones(tempId: string) {
         const db = await Database.load("sqlite:globalfutsal.db");
         const res = await db.select<SelectorData[]>(`
-      SELECT e.id, c.nombre || ' (' || t.nombre || ')' as nombre
+      SELECT e.id, COALESCE(NULLIF(e.nombre, ''), c.nombre || ' (' || t.nombre || ')') as nombre
       FROM Edicion e JOIN Competicion c ON e.competicion_id = c.id JOIN Temporada t ON e.temporada_id = t.id
       WHERE e.temporada_id = $1 ORDER BY c.nombre ASC
     `, [tempId]);
@@ -299,7 +300,7 @@ export default function Plantillas() {
         if (!selEquipo) return;
         const db = await Database.load("sqlite:globalfutsal.db");
         const res = await db.select<any[]>(`
-        SELECT DISTINCT e.id, c.nombre || ' (' || t.nombre || ')' as nombre_completo
+        SELECT DISTINCT e.id, COALESCE(NULLIF(e.nombre, ''), c.nombre || ' (' || t.nombre || ')') as nombre_completo
         FROM Plantilla pl
         JOIN Edicion e ON pl.edicion_id = e.id
         JOIN Competicion c ON e.competicion_id = c.id
@@ -385,58 +386,55 @@ export default function Plantillas() {
         }
     };
 
-    const disponiblesFiltrados = disponibles.filter(p => p.nombre_deportivo.toLowerCase().includes(busqueda.toLowerCase()));
+    const disponiblesFiltrados = disponibles.filter(p => {
+        const busquedaNorm = normalizeString(busqueda);
+        const textoNorm = normalizeString(p.nombre_deportivo + p.nombre + p.apellidos);
+        return textoNorm.includes(busquedaNorm);
+    });
 
     return (
-        <div className="p-8 min-h-screen bg-gray-50 text-navy ml-0 flex flex-col">
+        <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
 
             {/* CABECERA */}
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 mb-6">
-                <div className="flex justify-between items-start">
-                    <h1 className="text-2xl font-bold text-navy flex items-center gap-3"><Shirt className="text-purple" /> Gestión de Plantillas</h1>
+            <div className="glass-panel p-6 rounded-2xl border border-white/5 mb-6 shadow-2xl">
+                <div className="flex justify-between items-start flex-wrap gap-4">
+                    <h1 className="text-2xl font-display font-black text-white flex items-center gap-3"><Shirt className="text-purple-light text-glow-blue animate-pulse" /> Gestión de Plantillas</h1>
                     <div className="flex gap-4">
-                        <div className="flex flex-col"><label className="text-[10px] uppercase font-bold text-gray-400">Temporada</label><select value={selTemp} onChange={e => setSelTemp(e.target.value)} className="p-2 border rounded-lg bg-gray-50 text-sm w-32 outline-none">{temporadas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select></div>
-                        <div className="flex flex-col"><label className="text-[10px] uppercase font-bold text-gray-400">Edición</label><select value={selEdicion} onChange={e => setSelEdicion(e.target.value)} className="p-2 border rounded-lg bg-gray-50 text-sm w-56 outline-none">{ediciones.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
-                        <div className="flex flex-col"><label className="text-[10px] uppercase font-bold text-gray-400">Equipo</label><select value={selEquipo} onChange={e => setSelEquipo(e.target.value)} className="p-2 border rounded-lg bg-gray-50 text-sm w-56 outline-none">{equipos.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
+                        <div className="flex flex-col"><label className="text-[9px] uppercase font-black tracking-wider text-silver/40 mb-1">Temporada</label><select value={selTemp} onChange={e => setSelTemp(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm w-36 outline-none text-white cursor-pointer font-bold">{temporadas.map(t => <option key={t.id} value={t.id}>{t.nombre}</option>)}</select></div>
+                        <div className="flex flex-col"><label className="text-[9px] uppercase font-black tracking-wider text-silver/40 mb-1">Edición</label><select value={selEdicion} onChange={e => setSelEdicion(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm w-56 outline-none text-white cursor-pointer font-bold">{ediciones.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
+                        <div className="flex flex-col"><label className="text-[9px] uppercase font-black tracking-wider text-silver/40 mb-1">Equipo</label><select value={selEquipo} onChange={e => setSelEquipo(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm w-56 outline-none text-white cursor-pointer font-bold">{equipos.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}</select></div>
                     </div>
                 </div>
-                <div className="flex gap-6 mt-6 border-b border-gray-200">
-                    <button onClick={() => setTab("Jugador")} className={`pb-3 text-sm font-bold uppercase flex items-center gap-2 ${tab === "Jugador" ? "text-purple border-b-2 border-purple" : "text-gray-400"}`}><User size={18} /> Jugadores</button>
-                    <button onClick={() => setTab("Entrenador")} className={`pb-3 text-sm font-bold uppercase flex items-center gap-2 ${tab === "Entrenador" ? "text-purple border-b-2 border-purple" : "text-gray-400"}`}><Briefcase size={18} /> Cuerpo Técnico</button>
+                <div className="flex gap-2 mt-6 border-t border-white/5 pt-4">
+                    <button onClick={() => setTab("Jugador")} className={`px-4 py-2.5 rounded-lg text-xs uppercase tracking-wider font-black flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${tab === "Jugador" ? "bg-gradient-to-r from-purple to-purple-light text-white shadow-neon-blue" : "text-silver/50 hover:bg-white/5 hover:text-white"}`}><User size={16} /> Jugadores</button>
+                    <button onClick={() => setTab("Entrenador")} className={`px-4 py-2.5 rounded-lg text-xs uppercase tracking-wider font-black flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] ${tab === "Entrenador" ? "bg-gradient-to-r from-purple to-purple-light text-white shadow-neon-blue" : "text-silver/50 hover:bg-white/5 hover:text-white"}`}><Briefcase size={16} /> Cuerpo Técnico</button>
                 </div>
             </div>
 
-            <div className="flex gap-6 flex-1 h-[calc(100vh-300px)]">
+            <div className="flex gap-6 flex-1 h-[calc(100vh-310px)]">
 
                 {/* IZQUIERDA: DISPONIBLES */}
-                <div className="flex-1 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col overflow-hidden">
-                    <div className="p-3 border-b flex gap-2">
-                        <div className="flex-1 flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border">
-                            <Search size={16} className="text-gray-400" /><input placeholder="Buscar..." className="bg-transparent outline-none w-full text-sm" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
+                <div className="flex-1 glass-panel rounded-2xl border border-white/5 flex flex-col overflow-hidden shadow-xl">
+                    <div className="p-3.5 border-b border-white/5 bg-navy-dark/45 flex gap-2">
+                        <div className="flex-1 flex items-center gap-2 bg-navy-light/60 px-3 py-2 rounded-xl border border-white/5">
+                            <Search size={16} className="text-silver/40" />
+                            <input placeholder="Buscar..." className="bg-transparent outline-none w-full text-sm text-white placeholder-silver/40" value={busqueda} onChange={e => setBusqueda(e.target.value)} />
                         </div>
-                        {/* BOTÓN NUEVO (CREAR PERSONA) */}
-                        <button onClick={abrirCrearPersona} className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700" title={`Crear ${tab}`}><Plus size={20} /></button>
-                        <button onClick={abrirImportar} className="bg-white border text-navy px-3 rounded-lg text-sm hover:bg-gray-50" title="Importar plantilla"><Download size={16} /></button>
+                        {/* BOTÓN NUEVO */}
+                        <button onClick={abrirCrearPersona} className="bg-orange text-white p-2.5 rounded-xl hover:bg-orange-hover transition-colors shadow-md flex items-center justify-center" title={`Crear ${tab}`}><Plus size={20} /></button>
+                        <button onClick={abrirImportar} className="bg-navy-light border border-white/10 text-white px-3.5 rounded-xl text-sm hover:bg-white/5 transition-colors flex items-center gap-1 font-bold" title="Importar plantilla"><Download size={16} /></button>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
                         {disponiblesFiltrados.map(p => {
-                            // Debug: verificar datos de posiciones
-                            if (p.nombre_deportivo.includes('Pablo') || p.nombre_deportivo.includes('Otero')) {
-                                console.log('Jugador:', p.nombre_deportivo, 'Pos Principal:', p.posicion_principal, 'Pos Secundarias:', p.posiciones_secundarias);
-                            }
-                            // Debug: verificar nacionalidades
-                            if (p.nombre_deportivo.includes('Anas') || p.nombre_deportivo.includes('Anás')) {
-                                console.log('Jugador:', p.nombre_deportivo, 'Nac Principal:', p.nacionalidad_principal_id, 'Nac Secundarias:', p.nacionalidades_secundarias);
-                            }
                             return (
-                                <div key={p.id} className="flex items-center justify-between p-2 hover:bg-gray-50 rounded-lg group">
+                                <div key={p.id} className="flex items-center justify-between p-2.5 bg-navy-dark/35 border border-white/5 rounded-xl hover:bg-white/5 transition-all duration-300 group">
                                     <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-gray-100 overflow-hidden relative border">
+                                        <div className="w-10 h-10 rounded-full bg-navy border border-white/10 overflow-hidden relative shadow-inner shrink-0">
                                             <Avatar path={p.foto_path} alt="" />
                                         </div>
-                                        <div className="flex-1">
-                                            <div className="text-sm font-bold text-navy">{p.nombre_deportivo}</div>
-                                            <div className="text-[10px] text-gray-400 flex items-center gap-1">
+                                        <div className="min-w-0">
+                                            <div className="text-sm font-bold text-white truncate">{p.nombre_deportivo}</div>
+                                            <div className="text-[10px] text-silver/40 flex items-center gap-1.5 mt-0.5 font-medium">
                                                 <span>{p.nombre} {p.apellidos}</span>
                                                 {p.fecha_nacimiento && (
                                                     <>
@@ -445,17 +443,17 @@ export default function Plantillas() {
                                                     </>
                                                 )}
                                             </div>
-                                            <div className="flex items-center gap-1 mt-0.5">
-                                                {/* Banderas de nacionalidades */}
+                                            <div className="flex items-center gap-2 mt-1">
+                                                {/* Banderas */}
                                                 {getFlag(p.nacionalidad_principal_id) && (
-                                                    <div className="w-5 h-3.5 border border-gray-200 shadow-sm overflow-hidden">
+                                                    <div className="w-4.5 h-3 border border-white/10 shadow-sm overflow-hidden shrink-0 rounded-sm">
                                                         <Avatar path={getFlag(p.nacionalidad_principal_id)} alt="" />
                                                     </div>
                                                 )}
                                                 {(() => {
                                                     const nacsSecundarias = getNacionalidadesSecundarias(p.nacionalidades_secundarias);
                                                     return nacsSecundarias.length > 0 && getFlag(nacsSecundarias[0]) && (
-                                                        <div className="w-5 h-3.5 border border-gray-200 shadow-sm overflow-hidden opacity-80">
+                                                        <div className="w-4.5 h-3 border border-white/10 shadow-sm overflow-hidden opacity-80 shrink-0 rounded-sm">
                                                             <Avatar path={getFlag(nacsSecundarias[0])} alt="" />
                                                         </div>
                                                     );
@@ -464,10 +462,10 @@ export default function Plantillas() {
                                                 {tab === "Jugador" && (() => {
                                                     const posSecundarias = getPosicionesSecundarias(p.posiciones_secundarias);
                                                     return (
-                                                        <div className="text-[10px] uppercase flex items-center gap-1 ml-1">
-                                                            <span className="text-gray-600 font-semibold">{p.posicion_principal}</span>
+                                                        <div className="text-[9px] uppercase flex items-center gap-1 ml-1 font-bold">
+                                                            <span className="text-orange">{p.posicion_principal}</span>
                                                             {posSecundarias.length > 0 && (
-                                                                <span className="text-gray-400 font-normal">/ {posSecundarias[0]}</span>
+                                                                <span className="text-silver/40 font-normal">/ {posSecundarias[0]}</span>
                                                             )}
                                                         </div>
                                                     );
@@ -475,34 +473,34 @@ export default function Plantillas() {
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="flex gap-1">
-                                        {/* BOTÓN EDITAR EN LA LISTA */}
-                                        <button onClick={() => abrirEditarPersona(p)} className="p-1.5 text-gray-400 hover:text-blue-600 bg-white border rounded"><Edit size={14} /></button>
-                                        <button onClick={() => prepararAlta(p)} className="bg-purple text-white p-1.5 rounded hover:bg-purple-700"><Plus size={16} /></button>
+                                    <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                        <button onClick={() => abrirEditarPersona(p)} className="p-1.5 text-silver/60 hover:text-orange bg-navy border border-white/5 rounded-lg transition-colors"><Edit size={14} /></button>
+                                        <button onClick={() => prepararAlta(p)} className="bg-purple text-white p-1.5 rounded-lg hover:bg-purple-light transition-colors"><Plus size={16} /></button>
                                     </div>
                                 </div>
                             );
                         })}
+                        {disponiblesFiltrados.length === 0 && <div className="text-center py-12 text-silver/30 font-semibold">No se encontraron integrantes disponibles.</div>}
                     </div>
                 </div>
 
-                <div className="flex items-center text-gray-300"><ChevronRight /></div>
+                <div className="flex items-center text-silver/20"><ChevronRight size={32} /></div>
 
                 {/* DERECHA: PLANTILLA */}
-                <div className="flex-1 bg-purple/5 rounded-xl shadow-sm border border-purple/20 flex flex-col overflow-hidden">
-                    <div className="p-3 border-b border-purple/10 bg-purple/10 flex justify-between items-center">
-                        <h3 className="font-bold text-purple text-sm uppercase">Plantilla ({plantilla.length})</h3>
+                <div className="flex-1 bg-purple/10 border border-purple/20 rounded-2xl flex flex-col overflow-hidden shadow-xl">
+                    <div className="p-4 border-b border-purple/15 bg-purple/15 flex justify-between items-center">
+                        <h3 className="font-display font-black text-purple-light text-glow-blue text-xs uppercase tracking-wider">Plantilla Inscrita ({plantilla.length})</h3>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2 space-y-2">
+                    <div className="flex-1 overflow-y-auto p-3 space-y-2">
                         {plantilla.map(p => (
-                            <div key={p.plantilla_id} className="flex items-center bg-white border border-purple/10 rounded-lg p-2 shadow-sm group">
-                                <div className="w-8 text-center font-black text-xl text-purple">{p.dorsal || "-"}</div>
-                                <div className="relative w-10 h-10 mx-3">
-                                    <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-100 border"><Avatar path={p.foto_path} alt="" /></div>
+                            <div key={p.plantilla_id} className="flex items-center bg-navy-dark/45 border border-white/5 rounded-xl p-3 shadow-md group hover:bg-white/5 transition-all duration-300">
+                                <div className="w-8 text-center font-display font-black text-xl text-purple-light text-glow-blue">{p.dorsal || "-"}</div>
+                                <div className="relative w-10 h-10 mx-3 shrink-0">
+                                    <div className="w-10 h-10 rounded-full overflow-hidden bg-navy border border-white/15 shadow-inner"><Avatar path={p.foto_path} alt="" /></div>
                                 </div>
-                                <div className="flex-1">
-                                    <div className="font-bold text-navy text-sm">{p.nombre_deportivo}</div>
-                                    <div className="text-[10px] text-gray-400 flex items-center gap-1">
+                                <div className="flex-1 min-w-0">
+                                    <div className="font-bold text-white text-sm truncate">{p.nombre_deportivo}</div>
+                                    <div className="text-[10px] text-silver/40 flex items-center gap-1.5 mt-0.5 font-medium">
                                         <span>{p.nombre} {p.apellidos}</span>
                                         {p.fecha_nacimiento && (
                                             <>
@@ -511,17 +509,17 @@ export default function Plantillas() {
                                             </>
                                         )}
                                     </div>
-                                    <div className="flex items-center gap-1 mt-0.5">
-                                        {/* Banderas de nacionalidades */}
+                                    <div className="flex items-center gap-2 mt-1">
+                                        {/* Banderas */}
                                         {getFlag(p.nacionalidad_principal_id) && (
-                                            <div className="w-5 h-3.5 border border-gray-200 shadow-sm overflow-hidden">
+                                            <div className="w-4.5 h-3 border border-white/10 shadow-sm overflow-hidden shrink-0 rounded-sm">
                                                 <Avatar path={getFlag(p.nacionalidad_principal_id)} alt="" />
                                             </div>
                                         )}
                                         {(() => {
                                             const nacsSecundarias = getNacionalidadesSecundarias(p.nacionalidades_secundarias);
                                             return nacsSecundarias.length > 0 && getFlag(nacsSecundarias[0]) && (
-                                                <div className="w-5 h-3.5 border border-gray-200 shadow-sm overflow-hidden opacity-80">
+                                                <div className="w-4.5 h-3 border border-white/10 shadow-sm overflow-hidden opacity-80 shrink-0 rounded-sm">
                                                     <Avatar path={getFlag(nacsSecundarias[0])} alt="" />
                                                 </div>
                                             );
@@ -530,53 +528,54 @@ export default function Plantillas() {
                                         {tab === "Jugador" ? (() => {
                                             const posSecundarias = getPosicionesSecundarias(p.posiciones_secundarias);
                                             return (
-                                                <div className="text-[10px] uppercase flex items-center gap-1 ml-1">
-                                                    <span className="text-gray-600 font-semibold">{p.posicion_principal}</span>
+                                                <div className="text-[9px] uppercase flex items-center gap-1 ml-1 font-bold">
+                                                    <span className="text-orange">{p.posicion_principal}</span>
                                                     {posSecundarias.length > 0 && (
-                                                        <span className="text-gray-400 font-normal">/ {posSecundarias[0]}</span>
+                                                        <span className="text-silver/40 font-normal">/ {posSecundarias[0]}</span>
                                                     )}
                                                 </div>
                                             );
                                         })() : (
-                                            <span className="text-gray-500 text-[10px] uppercase ml-1">Entrenador</span>
+                                            <span className="text-silver/50 text-[9px] uppercase tracking-wider ml-1 font-bold">Cuerpo Técnico</span>
                                         )}
                                     </div>
                                 </div>
-                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                                    <button onClick={() => abrirEditarPersona(p)} className="p-1.5 text-gray-400 hover:text-blue-600 bg-gray-50 border rounded"><Edit size={14} /></button>
-                                    <button onClick={() => baja(p.plantilla_id!)} className="text-gray-300 hover:text-red-500 p-2"><Trash2 size={16} /></button>
+                                <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pl-2">
+                                    <button onClick={() => abrirEditarPersona(p)} className="p-1.5 text-silver/60 hover:text-orange bg-navy border border-white/5 rounded-lg transition-colors"><Edit size={14} /></button>
+                                    <button onClick={() => baja(p.plantilla_id!)} className="text-silver/40 hover:text-red p-1.5 hover:bg-red/10 rounded-lg transition-colors"><Trash2 size={16} /></button>
                                 </div>
                             </div>
                         ))}
+                        {plantilla.length === 0 && <div className="text-center py-12 text-silver/30 font-semibold">No hay miembros inscritos en la plantilla.</div>}
                     </div>
                 </div>
             </div>
 
             {/* MODAL DORSAL */}
             <Modal isOpen={modalDorsalOpen} onClose={() => setModalDorsalOpen(false)} title={`Inscribir a ${personaToAdd?.nombre_deportivo}`}>
-                <div className="space-y-4">
-                    <p className="text-sm text-gray-600">Asigna el dorsal para esta temporada:</p>
+                <div className="space-y-4 text-white">
+                    <p className="text-sm text-silver/70">Asigna el dorsal para esta temporada:</p>
                     <input
                         type="number"
                         value={dorsalTemp}
                         onChange={e => setDorsalTemp(e.target.value)}
                         onKeyDown={handleKeyDownDorsal}
-                        className="w-full p-4 text-center text-3xl font-black border rounded-lg focus:ring-2 focus:ring-purple outline-none"
+                        className="w-full p-4 text-center text-4xl font-display font-black border border-white/10 bg-navy rounded-xl focus:ring-2 focus:ring-purple-light outline-none text-purple-light text-glow-blue"
                         placeholder="#"
                         autoFocus
                     />
-                    <div className="flex justify-end gap-2">
-                        <button onClick={() => setModalDorsalOpen(false)} className="px-4 py-2 text-gray-500">Cancelar</button>
-                        <button onClick={guardarAltaConDorsal} className="bg-purple text-white px-6 py-2 rounded shadow">Inscribir</button>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                        <button onClick={() => setModalDorsalOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
+                        <button onClick={guardarAltaConDorsal} className="bg-purple text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-blue">Inscribir</button>
                     </div>
                 </div>
             </Modal>
 
             {/* MODAL CREAR/EDITAR PERSONA */}
             <Modal isOpen={modalPersonaOpen} onClose={() => setModalPersonaOpen(false)} title={editPersonaId ? `Editar ${tab}` : `Nuevo ${tab}`}>
-                <div className="space-y-4">
+                <div className="space-y-4 text-white">
                     <div className="flex justify-center mb-4">
-                        <div onClick={seleccionarNuevaFoto} className="w-24 h-24 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative group">
+                        <div onClick={seleccionarNuevaFoto} className="w-24 h-24 rounded-full bg-navy border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative group shadow-inner">
                             <Avatar path={personaForm.foto} alt="Foto" />
                             <div className="absolute inset-0 bg-black/40 flex items-center justify-center text-white opacity-0 group-hover:opacity-100 transition-opacity">
                                 <Upload size={20} />
@@ -584,31 +583,31 @@ export default function Plantillas() {
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-xs font-bold text-navy mb-1">Nombre</label><input value={personaForm.nombre} onChange={e => { const val = e.target.value; setPersonaForm(p => ({ ...p, nombre: val, apodo: `${val} ${p.apellidos}`.trim() })) }} className="w-full p-2 border rounded" /></div>
-                        <div><label className="block text-xs font-bold text-navy mb-1">Apellidos</label><input value={personaForm.apellidos} onChange={e => { const val = e.target.value; setPersonaForm(p => ({ ...p, apellidos: val, apodo: `${p.nombre} ${val}`.trim() })) }} className="w-full p-2 border rounded" /></div>
+                        <div><label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Nombre</label><input value={personaForm.nombre} onChange={e => { const val = e.target.value; setPersonaForm(p => ({ ...p, nombre: val, apodo: `${val} ${p.apellidos}`.trim() })) }} className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white focus:ring-1 focus:ring-orange outline-none" /></div>
+                        <div><label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Apellidos</label><input value={personaForm.apellidos} onChange={e => { const val = e.target.value; setPersonaForm(p => ({ ...p, apellidos: val, apodo: `${p.nombre} ${val}`.trim() })) }} className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white focus:ring-1 focus:ring-orange outline-none" /></div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-navy mb-1">Nombre Deportivo</label>
-                        <input value={personaForm.apodo} onChange={e => setPersonaForm({ ...personaForm, apodo: e.target.value })} className="w-full p-2 border rounded font-bold" />
+                        <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Nombre Deportivo</label>
+                        <input value={personaForm.apodo} onChange={e => setPersonaForm({ ...personaForm, apodo: e.target.value })} className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm font-bold text-white focus:ring-1 focus:ring-orange outline-none" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">1ª Nacionalidad</label>
+                            <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">1ª Nacionalidad</label>
                             <select
                                 value={personaForm.pais_id}
                                 onChange={e => setPersonaForm({ ...personaForm, pais_id: e.target.value })}
-                                className="w-full p-2 border rounded bg-white"
+                                className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white cursor-pointer focus:ring-1 focus:ring-orange outline-none"
                             >
                                 <option value="">-- Seleccionar --</option>
                                 {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">2ª Nacionalidad</label>
+                            <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">2ª Nacionalidad</label>
                             <select
                                 value={personaForm.pais2_id}
                                 onChange={e => setPersonaForm({ ...personaForm, pais2_id: e.target.value })}
-                                className="w-full p-2 border rounded bg-white"
+                                className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white cursor-pointer focus:ring-1 focus:ring-orange outline-none"
                             >
                                 <option value="">Ninguna</option>
                                 {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
@@ -616,11 +615,11 @@ export default function Plantillas() {
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-xs font-bold text-navy mb-1">Fecha Nacimiento</label><input type="date" value={personaForm.fecha_nacimiento} onChange={e => setPersonaForm({ ...personaForm, fecha_nacimiento: e.target.value })} className="w-full p-2 border rounded" /></div>
+                        <div><label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Fecha Nacimiento</label><input type="date" value={personaForm.fecha_nacimiento} onChange={e => setPersonaForm({ ...personaForm, fecha_nacimiento: e.target.value })} className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white focus:ring-1 focus:ring-orange outline-none cursor-pointer" /></div>
                         {tab === "Jugador" && (
                             <div>
-                                <label className="block text-xs font-bold text-navy mb-1">Posición Principal</label>
-                                <select value={personaForm.pos1} onChange={e => setPersonaForm({ ...personaForm, pos1: e.target.value })} className="w-full p-2 border rounded bg-white">
+                                <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Posición Principal</label>
+                                <select value={personaForm.pos1} onChange={e => setPersonaForm({ ...personaForm, pos1: e.target.value })} className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white cursor-pointer focus:ring-1 focus:ring-orange outline-none">
                                     {POSICIONES.map(p => <option key={p} value={p}>{p}</option>)}
                                 </select>
                             </div>
@@ -628,35 +627,36 @@ export default function Plantillas() {
                     </div>
                     {tab === "Jugador" && (
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">Posición Secundaria (Opcional)</label>
-                            <select value={personaForm.pos2} onChange={e => setPersonaForm({ ...personaForm, pos2: e.target.value })} className="w-full p-2 border rounded bg-white text-gray-600">
+                            <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Posición Secundaria (Opcional)</label>
+                            <select value={personaForm.pos2} onChange={e => setPersonaForm({ ...personaForm, pos2: e.target.value })} className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white cursor-pointer focus:ring-1 focus:ring-orange outline-none">
                                 <option value="">-- Ninguna --</option>
                                 {POSICIONES.map(p => <option key={p} value={p}>{p}</option>)}
                             </select>
                         </div>
                     )}
 
-                    <div className="flex justify-end gap-2 pt-2">
-                        <button onClick={() => setModalPersonaOpen(false)} className="px-4 py-2 text-gray-500">Cancelar</button>
-                        <button onClick={guardarPersonaDB} className="bg-navy text-white px-4 py-2 rounded shadow">Guardar Cambios</button>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                        <button onClick={() => setModalPersonaOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
+                        <button onClick={guardarPersonaDB} className="bg-gradient-to-r from-orange to-orange-neon text-white px-5 py-2.5 rounded-xl font-bold shadow-neon-orange">Guardar Cambios</button>
                     </div>
                 </div>
             </Modal>
 
             {/* MODAL IMPORTAR */}
             <Modal isOpen={modalImportarOpen} onClose={() => setModalImportarOpen(false)} title="Importar Plantilla">
-                <div className="space-y-4">
+                <div className="space-y-4 text-white">
                     {edicionesPrevias.length === 0 ? (
-                        <p className="text-red-500">Este equipo no tiene plantillas en otras ediciones.</p>
+                        <p className="text-red">Este equipo no tiene plantillas en otras ediciones.</p>
                     ) : (
                         <>
-                            <label className="block text-sm font-bold mb-2">Selecciona la edición de origen:</label>
-                            <select className="w-full p-2 border rounded" value={selEdicionPrevia} onChange={e => setSelEdicionPrevia(e.target.value)}>
+                            <label className="block text-xs font-black tracking-wider text-silver/40 mb-1.5 uppercase">Selecciona la edición de origen:</label>
+                            <select className="w-full p-2.5 border border-white/10 rounded-lg bg-navy text-sm text-white cursor-pointer focus:ring-1 focus:ring-orange outline-none" value={selEdicionPrevia} onChange={e => setSelEdicionPrevia(e.target.value)}>
                                 <option value="">-- Seleccionar --</option>
                                 {edicionesPrevias.map(e => <option key={e.id} value={e.id}>{e.nombre_completo}</option>)}
                             </select>
-                            <div className="flex justify-end gap-2 mt-4">
-                                <button onClick={ejecutarImportacion} disabled={!selEdicionPrevia} className="bg-green-600 text-white px-4 py-2 rounded shadow disabled:opacity-50">Copiar</button>
+                            <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                                <button onClick={() => setModalImportarOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
+                                <button onClick={ejecutarImportacion} disabled={!selEdicionPrevia} className="bg-success text-white px-5 py-2.5 rounded-xl font-bold disabled:opacity-50 shadow-md">Copiar</button>
                             </div>
                         </>
                     )}

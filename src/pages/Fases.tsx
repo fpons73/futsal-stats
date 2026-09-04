@@ -52,9 +52,9 @@ export default function Fases() {
     async function cargarEdiciones() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
-            // Hacemos un JOIN bonito para que en el select salga "Competición - Temporada"
+            // Hacemos un JOIN bonito para que en el select salga "Competición - Temporada - Nombre"
             const query = `
-        SELECT e.id, (c.nombre || ' - ' || t.nombre) as nombre_completo
+        SELECT e.id, (c.nombre || ' - ' || t.nombre || COALESCE(' - ' || e.nombre, '')) as nombre_completo
         FROM Edicion e
         JOIN Competicion c ON e.competicion_id = c.id
         JOIN Temporada t ON e.temporada_id = t.id
@@ -144,34 +144,34 @@ export default function Fases() {
     }
 
     return (
-        <div className="p-8 min-h-screen bg-gray-50 text-navy ml-0">
+        <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
 
             {/* CABECERA */}
-            <div className="flex justify-between items-center mb-6">
+            <div className="flex justify-between items-center mb-6 glass-panel p-5 rounded-2xl border border-white/5 shadow-2xl">
                 <div>
-                    <h1 className="text-3xl font-bold text-navy flex items-center gap-3">
-                        <ListOrdered className="text-purple" /> Fases y Jornadas
+                    <h1 className="text-2xl font-display font-black text-white flex items-center gap-3">
+                        <ListOrdered className="text-orange text-glow-orange animate-pulse" /> Fases y Jornadas
                     </h1>
                 </div>
                 <button
                     onClick={abrirCrear}
                     disabled={!edicionSeleccionada}
-                    className="bg-purple hover:bg-purple/90 text-white px-6 py-2.5 rounded-lg font-semibold shadow-md flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     <Plus size={20} /> <span>Nueva Fase</span>
                 </button>
             </div>
 
-            {/* FILTRO DE EDICIÓN (ESTILO CAPTURA) */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex items-center gap-4">
-                <div className="flex items-center gap-2 text-gray-400">
-                    <Filter size={20} />
-                    <span className="font-bold text-sm uppercase">Selecciona Edición:</span>
+            {/* FILTRO DE EDICIÓN */}
+            <div className="glass-panel p-4 rounded-xl border border-white/5 mb-6 flex items-center gap-4">
+                <div className="flex items-center gap-2 text-silver/40">
+                    <Filter size={18} />
+                    <span className="font-bold text-xs uppercase tracking-wider">Selecciona Edición:</span>
                 </div>
                 <select
                     value={edicionSeleccionada}
                     onChange={(e) => setEdicionSeleccionada(e.target.value)}
-                    className="flex-1 p-2 border border-gray-300 rounded-lg bg-gray-50 font-medium text-navy focus:ring-2 focus:ring-purple outline-none"
+                    className="flex-1 p-2.5 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold"
                 >
                     <option value="">-- Seleccionar --</option>
                     {ediciones.map(ed => (
@@ -181,9 +181,9 @@ export default function Fases() {
             </div>
 
             {/* TABLA DE FASES */}
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
                 <table className="w-full text-left">
-                    <thead className="bg-gray-50 text-gray-400 text-xs uppercase tracking-wider font-bold">
+                    <thead className="bg-navy-dark/85 border-b border-white/5 text-[10px] text-silver/40 uppercase tracking-widest font-black font-display">
                         <tr>
                             <th className="p-4 w-24 text-center">Orden</th>
                             <th className="p-4">Nombre de la Fase</th>
@@ -192,22 +192,22 @@ export default function Fases() {
                             <th className="p-4 w-24 text-right">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-white/5 text-silver/80">
                         {fases.map((f) => (
-                            <tr key={f.id} className="hover:bg-gray-50 transition-colors">
-                                <td className="p-4 text-center font-bold text-blue-600">{f.orden}</td>
-                                <td className="p-4 font-bold text-navy">{f.nombre}</td>
+                            <tr key={f.id} className="hover:bg-white/5 transition-colors group duration-200">
+                                <td className="p-4 text-center font-display font-black text-orange text-sm">{f.orden}</td>
+                                <td className="p-4 font-bold text-white group-hover:text-orange transition-colors">{f.nombre}</td>
                                 <td className="p-4 text-center">
-                                    <span className={`text-[10px] px-2 py-1 rounded font-bold uppercase ${f.tipo === 'Liga' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                    <span className={`text-[10px] px-2 py-0.5 rounded font-black uppercase border tracking-wider ${f.tipo === 'Liga' ? 'bg-success/10 text-success border-success/20' : 'bg-red/10 text-red border-red/20'}`}>
                                         {f.tipo}
                                     </span>
                                 </td>
-                                <td className="p-4 text-center text-sm text-gray-500">
+                                <td className="p-4 text-center text-sm font-bold text-white/70">
                                     {f.ida_vuelta === 1 ? "Ida y Vuelta" : "Partido Único"}
                                 </td>
-                                <td className="p-4 text-right flex justify-end gap-2">
-                                    <button onClick={() => abrirEditar(f)} className="p-1.5 text-gray-400 hover:text-blue-600 bg-gray-100 hover:bg-blue-50 rounded"><Edit size={16} /></button>
-                                    <button onClick={() => borrar(f.id)} className="p-1.5 text-gray-400 hover:text-red bg-gray-100 hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+                                <td className="p-4 text-right flex justify-end gap-2 transition-opacity duration-300">
+                                    <button onClick={() => abrirEditar(f)} className="p-1.5 text-accent-blue hover:bg-white/5 rounded-lg bg-navy border border-white/5 transition-colors"><Edit size={16} /></button>
+                                    <button onClick={() => borrar(f.id)} className="p-1.5 text-red hover:bg-red/10 rounded-lg bg-navy border border-white/5 transition-colors"><Trash2 size={16} /></button>
                                 </td>
                             </tr>
                         ))}
@@ -216,9 +216,9 @@ export default function Fases() {
 
                 {/* ESTADO VACÍO */}
                 {!edicionSeleccionada ? (
-                    <div className="p-10 text-center text-gray-400">Selecciona una edición arriba para ver sus jornadas.</div>
+                    <div className="p-10 text-center text-silver/40 font-medium">Selecciona una edición arriba para ver sus jornadas.</div>
                 ) : fases.length === 0 ? (
-                    <div className="p-10 text-center text-gray-400">Esta edición no tiene fases creadas aún.</div>
+                    <div className="p-10 text-center text-silver/40 font-medium">Esta edición no tiene fases creadas aún.</div>
                 ) : null}
             </div>
 
@@ -228,36 +228,36 @@ export default function Fases() {
 
                     <div className="grid grid-cols-4 gap-4">
                         <div className="col-span-1">
-                            <label className="block text-xs font-bold text-navy mb-1">Orden</label>
-                            <input type="number" value={orden} onChange={e => setOrden(parseInt(e.target.value))} className="w-full p-2 border rounded text-center font-bold" />
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Orden</label>
+                            <input type="number" value={orden} onChange={e => setOrden(parseInt(e.target.value))} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-center font-display font-black text-white outline-none focus:border-orange" />
                         </div>
                         <div className="col-span-3">
-                            <label className="block text-xs font-bold text-navy mb-1">Nombre</label>
-                            <input value={nombre} onChange={e => setNombre(e.target.value)} className="w-full p-2 border rounded" autoFocus />
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre</label>
+                            <input value={nombre} onChange={e => setNombre(e.target.value)} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold" autoFocus />
                         </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">Tipo</label>
-                            <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full p-2 border rounded bg-white">
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Tipo</label>
+                            <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="Liga">Liga Regular</option>
                                 <option value="Eliminatoria">Eliminatoria / Playoff</option>
                                 <option value="Grupos">Fase de Grupos</option>
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">Formato</label>
-                            <select value={formato} onChange={e => setFormato(parseInt(e.target.value))} className="w-full p-2 border rounded bg-white">
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Formato</label>
+                            <select value={formato} onChange={e => setFormato(parseInt(e.target.value))} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value={0}>Partido Único</option>
                                 <option value={1}>Ida y Vuelta</option>
                             </select>
                         </div>
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-4">
-                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-500">Cancelar</button>
-                        <button onClick={guardar} className="bg-purple hover:bg-purple/90 text-white px-6 py-2 rounded shadow-md">Guardar</button>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>

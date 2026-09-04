@@ -127,95 +127,101 @@ export default function Competiciones() {
     }
 
     return (
-        <div className="p-8 min-h-screen bg-gray-50 text-navy ml-0">
+        <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
 
-            <div className="flex justify-between items-center mb-8">
+            {/* CABECERA */}
+            <div className="flex justify-between items-center mb-8 glass-panel p-5 rounded-2xl border border-white/5 shadow-2xl">
                 <div>
-                    <h1 className="text-3xl font-bold text-navy flex items-center gap-3"><Trophy className="text-orange" /> Competiciones</h1>
-                    <p className="text-silver-dim mt-1">Ligas, Copas y Torneos.</p>
+                    <h1 className="text-2xl font-display font-black text-white flex items-center gap-3"><Trophy className="text-orange text-glow-orange animate-pulse" /> Competiciones</h1>
+                    <p className="text-silver/50 text-sm mt-1">Ligas, Copas y Torneos registrados en el sistema</p>
                 </div>
-                <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-lg font-semibold shadow-md flex items-center gap-2 hover:scale-105 transition-transform">
+                <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     <Plus size={20} /> <span>Nueva</span>
                 </button>
             </div>
 
+            {/* REJILLA DE TARJETAS */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {competiciones.map((comp) => {
                     const pais = paises.find(p => p.id === comp.pais_id);
                     const conf = confederaciones.find(c => c.id === comp.confederacion_id);
 
                     return (
-                        <div key={comp.id} className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 hover:shadow-lg transition-all relative group">
-                            <div className="flex items-start gap-4">
-                                <div className="w-16 h-16 rounded-lg bg-gray-50 border border-gray-100 flex items-center justify-center p-1 overflow-hidden shrink-0">
-                                    {/* IMAGEN ESTÁNDAR */}
-                                    {comp.logo_path ? (
-                                        <img src={convertFileSrc(comp.logo_path)} className="w-full h-full object-contain" alt={comp.nombre} />
-                                    ) : (
-                                        <Trophy className="text-gray-300" />
-                                    )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                    <h3 className="font-bold text-navy text-lg leading-tight line-clamp-2" title={comp.nombre}>{comp.nombre}</h3>
-                                    <span className="inline-block bg-orange/10 text-orange text-[10px] font-bold px-2 py-0.5 rounded uppercase mt-2">{comp.tipo}</span>
+                        <div key={comp.id} className="glass-panel p-6 rounded-2xl border border-white/5 hover:border-white/10 hover:shadow-2xl transition-all duration-300 relative group flex flex-col justify-between">
+                            <div>
+                                <div className="flex items-start gap-4">
+                                    <div className="w-16 h-16 rounded-xl bg-white border border-white/10 flex items-center justify-center p-1.5 overflow-hidden shrink-0 shadow-md">
+                                        {comp.logo_path ? (
+                                            <img src={convertFileSrc(comp.logo_path)} className="w-full h-full object-contain filter drop-shadow-md" alt={comp.nombre} />
+                                        ) : (
+                                            <Trophy className="text-silver/30 animate-pulse" />
+                                        )}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <h3 className="font-bold text-white text-lg leading-tight line-clamp-2 group-hover:text-orange transition-colors" title={comp.nombre}>{comp.nombre}</h3>
+                                        <span className="inline-block bg-orange/10 text-orange border border-orange/20 text-[10px] font-black px-2 py-0.5 rounded uppercase mt-2 tracking-wider">{comp.tipo}</span>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="mt-4 pt-3 border-t border-gray-100 flex items-center gap-2 text-sm text-gray-500">
+                            
+                            <div className="mt-4 pt-3 border-t border-white/5 flex items-center gap-2 text-sm text-silver/60">
                                 {pais ? (
                                     <>
-                                        <div className="w-6 h-4 border border-gray-200 shadow-sm flex items-center justify-center bg-gray-100">
+                                        <div className="w-6 h-4 border border-white/10 shadow-sm flex items-center justify-center bg-navy rounded-sm">
                                             {pais.bandera_path && <img src={convertFileSrc(pais.bandera_path)} className="w-full h-full object-cover" />}
                                         </div>
-                                        <span className="truncate">{pais.nombre}</span>
+                                        <span className="truncate font-bold text-xs">{pais.nombre}</span>
                                     </>
                                 ) : conf ? (
                                     <>
-                                        <div className="w-6 h-6 rounded-full border border-gray-200 shadow-sm p-0.5 bg-white flex items-center justify-center">
+                                        <div className="w-6 h-6 rounded-full border border-white/10 shadow-sm p-0.5 bg-navy flex items-center justify-center">
                                             {conf.logo_path && <img src={convertFileSrc(conf.logo_path)} className="w-full h-full object-contain" />}
                                         </div>
-                                        <span className="truncate">{conf.codigo}</span>
+                                        <span className="truncate font-bold text-xs">{conf.codigo}</span>
                                     </>
-                                ) : <span className="text-xs italic text-gray-400">Sin asignar</span>}
+                                ) : <span className="text-xs italic text-silver/30 font-medium">Sin asignar</span>}
                             </div>
-                            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity bg-white/90 p-1 rounded shadow-sm">
-                                <button onClick={() => abrirEditar(comp)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"><Edit size={16} /></button>
-                                <button onClick={() => borrar(comp.id)} className="p-1.5 text-red hover:bg-red-50 rounded"><Trash2 size={16} /></button>
+
+                            <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-300 bg-navy-dark/95 p-1 rounded-xl border border-white/5 shadow-2xl backdrop-blur-sm">
+                                <button onClick={() => abrirEditar(comp)} className="p-1.5 text-accent-blue hover:bg-white/5 rounded-lg transition-colors"><Edit size={16} /></button>
+                                <button onClick={() => borrar(comp.id)} className="p-1.5 text-red hover:bg-red/10 rounded-lg transition-colors"><Trash2 size={16} /></button>
                             </div>
                         </div>
                     );
                 })}
             </div>
 
+            {/* MODAL */}
             <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Competición" : "Nueva Competición"}>
                 <div className="space-y-4">
                     <div className="flex justify-center">
                         <div
                             onClick={seleccionarLogo}
-                            className="w-32 h-32 rounded-lg border-2 border-dashed border-gray-300 hover:border-orange cursor-pointer flex items-center justify-center bg-gray-50 overflow-hidden relative group transition-colors"
+                            className="w-32 h-32 rounded-xl border border-white/10 hover:border-orange cursor-pointer flex items-center justify-center bg-white overflow-hidden relative group transition-colors shadow-inner"
                         >
                             {logoPath ? (
-                                <img src={convertFileSrc(logoPath)} className="w-full h-full object-contain p-2" />
+                                <img src={convertFileSrc(logoPath)} className="w-full h-full object-contain p-2 filter drop-shadow-sm" />
                             ) : (
-                                <div className="text-center text-gray-400 group-hover:text-orange transition-colors">
-                                    <Upload size={24} className="mx-auto mb-1" />
-                                    <span className="text-[10px] font-bold uppercase">Subir Logo</span>
+                                <div className="text-center text-silver/40 group-hover:text-orange transition-colors">
+                                    <Upload size={24} className="mx-auto mb-1 text-silver/30" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">Subir Logo</span>
                                 </div>
                             )}
                         </div>
                         {logoPath && (
-                            <button onClick={(e) => { e.stopPropagation(); setLogoPath(null); }} className="absolute ml-28 mt-[-10px] text-red bg-white rounded-full p-1 shadow border hover:bg-red hover:text-white transition-colors"><X size={14} /></button>
+                            <button onClick={(e) => { e.stopPropagation(); setLogoPath(null); }} className="absolute ml-28 mt-[-10px] text-red bg-navy border border-white/10 rounded-full p-1 shadow-2xl hover:bg-white/5 transition-colors"><X size={14} /></button>
                         )}
                     </div>
 
                     <div>
-                        <label className="block text-sm font-bold text-navy mb-1">Nombre</label>
-                        <input value={nombre} onChange={e => setNombre(e.target.value)} className="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-orange outline-none text-navy" />
+                        <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre</label>
+                        <input value={nombre} onChange={e => setNombre(e.target.value)} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold" />
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-bold text-navy mb-1">Tipo</label>
-                            <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full p-2 border border-gray-300 rounded bg-white text-navy">
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Tipo</label>
+                            <select value={tipo} onChange={e => setTipo(e.target.value)} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="Liga">Liga</option>
                                 <option value="Copa">Copa</option>
                                 <option value="Playoff">Playoff</option>
@@ -224,28 +230,28 @@ export default function Competiciones() {
                         </div>
                     </div>
 
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                        <label className="block text-sm font-bold text-navy mb-2">Ámbito</label>
+                    <div className="bg-navy-dark/40 p-4 rounded-xl border border-white/5">
+                        <label className="block text-xs font-bold text-silver/50 mb-2 uppercase tracking-wider">Ámbito</label>
                         <div className="flex gap-4 mb-3">
-                            <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={ambito === "nacional"} onChange={() => setAmbito("nacional")} className="text-orange focus:ring-orange" /><span className="text-sm text-navy">Nacional</span></label>
-                            <label className="flex items-center gap-2 cursor-pointer"><input type="radio" checked={ambito === "internacional"} onChange={() => setAmbito("internacional")} className="text-orange focus:ring-orange" /><span className="text-sm text-navy">Internacional</span></label>
+                            <label className="flex items-center gap-2 cursor-pointer font-bold text-sm"><input type="radio" checked={ambito === "nacional"} onChange={() => setAmbito("nacional")} className="text-orange focus:ring-orange cursor-pointer" /><span className="text-sm">Nacional</span></label>
+                            <label className="flex items-center gap-2 cursor-pointer font-bold text-sm"><input type="radio" checked={ambito === "internacional"} onChange={() => setAmbito("internacional")} className="text-orange focus:ring-orange cursor-pointer" /><span className="text-sm">Internacional</span></label>
                         </div>
                         {ambito === "nacional" ? (
-                            <select value={seleccionId} onChange={e => setSeleccionId(e.target.value)} className="w-full p-2 border border-gray-300 rounded bg-white text-navy">
+                            <select value={seleccionId} onChange={e => setSeleccionId(e.target.value)} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="">-- Selecciona País --</option>
                                 {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                             </select>
                         ) : (
-                            <select value={seleccionId} onChange={e => setSeleccionId(e.target.value)} className="w-full p-2 border border-gray-300 rounded bg-white text-navy">
+                            <select value={seleccionId} onChange={e => setSeleccionId(e.target.value)} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="">-- Selecciona Confederación --</option>
                                 {confederaciones.map(c => <option key={c.id} value={c.id}>{c.codigo}</option>)}
                             </select>
                         )}
                     </div>
 
-                    <div className="flex justify-end gap-3 pt-2">
-                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-gray-500 hover:bg-gray-100 rounded">Cancelar</button>
-                        <button onClick={guardar} className="bg-navy text-white px-6 py-2 rounded font-medium shadow-md">Guardar</button>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>

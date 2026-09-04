@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { open, ask } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Eye, Filter, User, Upload, X, Calendar } from "lucide-react";
 import Modal from "../components/Modal";
 import ImagenLocal from "../components/ImagenLocal";
+import { normalizeString } from "../utils/stringUtils";
 
 // Definición de posiciones de Futsal
 const POSICIONES = ["Portero", "Cierre", "Ala", "Pívot", "Universal"];
@@ -43,6 +44,8 @@ export default function Jugadores() {
     const [modalViewOpen, setModalViewOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
     const [selectedPlayer, setSelectedPlayer] = useState<Jugador | null>(null);
+    const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+    const [jugadorABorrar, setJugadorABorrar] = useState<Jugador | null>(null);
 
     // Formulario
     const [formData, setFormData] = useState({
@@ -145,12 +148,21 @@ export default function Jugadores() {
         } catch (error) { console.error("Error guardando:", error); }
     }
 
-    async function borrar(id: number) {
-        const confirm = await ask("¿Eliminar jugador? Se borrará su historial.", { title: "Confirmar", kind: "warning", okLabel: "Sí", cancelLabel: "No" });
-        if (confirm) {
+    function solicitarBorrarJugador(j: Jugador) {
+        setJugadorABorrar(j);
+        setIsDeleteConfirmOpen(true);
+    }
+
+    async function ejecutarBorradoJugador() {
+        if (!jugadorABorrar) return;
+        try {
             const db = await Database.load("sqlite:globalfutsal.db");
-            await db.execute("DELETE FROM Persona WHERE id = $1", [id]);
+            await db.execute("DELETE FROM Persona WHERE id = $1", [jugadorABorrar.id]);
             cargarDatos();
+            setIsDeleteConfirmOpen(false);
+            setJugadorABorrar(null);
+        } catch (error) {
+            console.error("Error al borrar jugador:", error);
         }
     }
 
@@ -194,49 +206,53 @@ export default function Jugadores() {
     };
 
     const jugadoresFiltrados = jugadores.filter(j => {
-        const texto = (j.nombre_deportivo + j.nombre + j.apellidos).toLowerCase();
-        const matchTexto = texto.includes(busqueda.toLowerCase());
+        const busquedaNorm = normalizeString(busqueda);
+        const textoNorm = normalizeString(j.nombre_deportivo + j.nombre + j.apellidos);
+        const matchTexto = textoNorm.includes(busquedaNorm);
         const matchPais = filtroPais === "todos" || j.nacionalidad_principal_id?.toString() === filtroPais;
         const matchPos = filtroPos === "todas" || j.posicion_principal === filtroPos;
         return matchTexto && matchPais && matchPos;
     });
 
     return (
-        <div className="p-8 min-h-screen bg-gray-50 text-navy ml-0">
+        <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
 
-            <div className="flex justify-between items-center mb-6">
+            {/* CABECERA */}
+            <div className="flex justify-between items-center mb-6 glass-panel p-5 rounded-2xl border border-white/5 shadow-2xl">
                 <div>
-                    <h1 className="text-3xl font-bold text-navy flex items-center gap-3">
-                        <User className="text-orange" /> Jugadores
+                    <h1 className="text-2xl font-display font-black text-white flex items-center gap-3">
+                        <User className="text-orange text-glow-orange animate-pulse" /> Jugadores
                     </h1>
-                    <p className="text-silver-dim mt-1">{jugadores.length} jugadores registrados</p>
+                    <p className="text-silver/50 text-sm mt-1">{jugadores.length} jugadores registrados en el sistema</p>
                 </div>
-                <button onClick={abrirCrear} className="bg-navy hover:bg-navy-light text-white px-6 py-2.5 rounded-lg font-medium shadow-md flex items-center gap-2">
+                <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     <Plus size={20} /> <span>Nuevo</span>
                 </button>
             </div>
 
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 mb-6 flex flex-wrap items-center gap-4">
-                <div className="flex-1 min-w-[200px] flex items-center gap-3 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
-                    <Search className="text-gray-400" size={20} />
-                    <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre..." className="bg-transparent outline-none w-full text-navy placeholder-gray-400" />
+            {/* FILTROS */}
+            <div className="glass-panel p-4 rounded-xl border border-white/5 mb-6 flex flex-wrap items-center gap-4">
+                <div className="flex-1 min-w-[200px] flex items-center gap-3 bg-navy-light/60 px-3 py-2 rounded-xl border border-white/5">
+                    <Search className="text-silver/40" size={18} />
+                    <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre..." className="bg-transparent outline-none w-full text-white placeholder-silver/40 text-sm" />
                 </div>
                 <div className="flex items-center gap-2">
-                    <Filter size={20} className="text-gray-400" />
-                    <select value={filtroPais} onChange={e => setFiltroPais(e.target.value)} className="p-2 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-orange outline-none">
+                    <Filter size={18} className="text-silver/40" />
+                    <select value={filtroPais} onChange={e => setFiltroPais(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold">
                         <option value="todos">Todos los Países</option>
                         {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </select>
-                    <select value={filtroPos} onChange={e => setFiltroPos(e.target.value)} className="p-2 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-orange outline-none">
+                    <select value={filtroPos} onChange={e => setFiltroPos(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold">
                         <option value="todas">Todas las Posiciones</option>
                         {POSICIONES.map(p => <option key={p} value={p}>{p}</option>)}
                     </select>
                 </div>
             </div>
 
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+            {/* TABLA */}
+            <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
                 <table className="w-full text-left">
-                    <thead className="bg-gray-50 text-gray-400 text-xs uppercase tracking-wider font-bold">
+                    <thead className="bg-navy-dark/85 border-b border-white/5 text-[10px] text-silver/40 uppercase tracking-widest font-black font-display">
                         <tr>
                             <th className="p-4 w-16 text-center">Foto</th>
                             <th className="p-4">Nombre Deportivo</th>
@@ -246,29 +262,29 @@ export default function Jugadores() {
                             <th className="p-4 text-right">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-100">
+                    <tbody className="divide-y divide-white/5 text-silver/80">
                         {jugadoresFiltrados.map((j) => {
                             let nac2Id = null;
                             try { nac2Id = JSON.parse(j.nacionalidades_secundarias)[0]; } catch { }
 
                             return (
-                                <tr key={j.id} className="hover:bg-gray-50 transition-colors group">
+                                <tr key={j.id} className="hover:bg-white/5 transition-colors group duration-200">
                                     <td className="p-3 text-center">
-                                        <div className="w-10 h-10 rounded-full bg-gray-100 border border-gray-200 overflow-hidden mx-auto flex items-center justify-center">
+                                        <div className="w-10 h-10 rounded-full bg-navy border border-white/10 overflow-hidden mx-auto flex items-center justify-center shadow-inner">
                                             <ImagenLocal path={j.foto_path} alt={j.nombre_deportivo} className="w-full h-full object-cover" />
                                         </div>
                                     </td>
                                     <td className="p-4">
-                                        <div className="font-bold text-navy">{j.nombre_deportivo}</div>
-                                        <div className="text-xs text-gray-400">{j.nombre} {j.apellidos}</div>
+                                        <div className="font-bold text-white group-hover:text-orange transition-colors">{j.nombre_deportivo}</div>
+                                        <div className="text-xs text-silver/40 font-medium">{j.nombre} {j.apellidos}</div>
                                     </td>
                                     <td className="p-4 text-center">
-                                        <div className="flex justify-center gap-1">
-                                            {getBandera(j.nacionalidad_principal_id) && <img src={getBandera(j.nacionalidad_principal_id)!} className="w-6 h-4 border border-gray-200 shadow-sm" />}
-                                            {getBandera(nac2Id) && <img src={getBandera(nac2Id)!} className="w-6 h-4 border border-gray-200 shadow-sm opacity-80" />}
+                                        <div className="flex justify-center gap-1.5">
+                                            {getBandera(j.nacionalidad_principal_id) && <img src={getBandera(j.nacionalidad_principal_id)!} className="w-6 h-4 border border-white/10 shadow-sm rounded-sm" />}
+                                            {getBandera(nac2Id) && <img src={getBandera(nac2Id)!} className="w-6 h-4 border border-white/10 shadow-sm opacity-80 rounded-sm" />}
                                         </div>
                                     </td>
-                                    <td className="p-4 text-center font-mono text-sm text-gray-600">
+                                    <td className="p-4 text-center font-display font-bold text-sm text-white">
                                         {calcularEdad(j.fecha_nacimiento)}
                                     </td>
                                     <td className="p-4">
@@ -276,78 +292,87 @@ export default function Jugadores() {
                                             const posSecundarias = getPosicionesSecundarias(j.posiciones_secundarias);
                                             return (
                                                 <div className="flex items-center gap-1.5">
-                                                    <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-bold border border-blue-100 uppercase">{j.posicion_principal}</span>
+                                                    <span className="bg-orange/10 text-orange border border-orange/20 px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider">{j.posicion_principal}</span>
                                                     {posSecundarias.length > 0 && (
-                                                        <span className="text-gray-400 text-xs font-normal uppercase">/ {posSecundarias[0]}</span>
+                                                        <span className="text-silver/40 text-xs font-normal uppercase">/ {posSecundarias[0]}</span>
                                                     )}
                                                 </div>
                                             );
                                         })()}
                                     </td>
-                                    <td className="p-4 text-right flex justify-end gap-2 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                                        <button onClick={() => abrirFicha(j)} className="p-1.5 text-green-600 hover:bg-green-50 rounded bg-white border border-gray-200"><Eye size={16} /></button>
-                                        <button onClick={() => abrirEditar(j)} className="p-1.5 text-blue-600 hover:bg-blue-50 rounded bg-white border border-gray-200"><Edit size={16} /></button>
-                                        <button onClick={() => borrar(j.id)} className="p-1.5 text-red hover:bg-red-50 rounded bg-white border border-gray-200"><Trash2 size={16} /></button>
+                                    <td className="p-4 text-right flex justify-end gap-2 transition-opacity duration-300">
+                                        <button onClick={() => abrirFicha(j)} className="p-1.5 text-success hover:bg-white/5 rounded-lg bg-navy border border-white/5 transition-colors"><Eye size={16} /></button>
+                                        <button onClick={() => abrirEditar(j)} className="p-1.5 text-accent-blue hover:bg-white/5 rounded-lg bg-navy border border-white/5 transition-colors"><Edit size={16} /></button>
+                                        <button onClick={() => solicitarBorrarJugador(j)} className="p-1.5 text-red hover:bg-red/10 rounded-lg bg-navy border border-white/5 transition-colors"><Trash2 size={16} /></button>
                                     </td>
                                 </tr>
                             );
                         })}
                     </tbody>
                 </table>
-                {jugadoresFiltrados.length === 0 && <div className="p-10 text-center text-gray-400">No se encontraron jugadores.</div>}
+                {jugadoresFiltrados.length === 0 && <div className="p-10 text-center text-silver/40 font-medium">No se encontraron jugadores.</div>}
             </div>
 
             <Modal isOpen={modalFormOpen} onClose={() => setModalFormOpen(false)} title={editingId ? "Editar Jugador" : "Nuevo Jugador"}>
                 <div className="space-y-4">
                     <div className="flex items-center gap-4 mb-4">
-                        <div onClick={seleccionarFoto} className="w-20 h-20 rounded-full bg-gray-100 border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative">
+                        <div onClick={seleccionarFoto} className="w-20 h-20 rounded-full bg-navy-dark border border-white/10 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative shadow-inner">
                             <ImagenLocal path={formData.foto} alt="Foto" className="w-full h-full object-cover" />
-                            {!formData.foto && <Upload size={20} className="text-gray-400" />}
+                            {!formData.foto && <Upload size={20} className="text-silver/40" />}
                         </div>
                         <div className="flex-1">
-                            <label className="block text-xs font-bold text-navy mb-1">Nombre Deportivo</label>
-                            <input value={formData.apodo} onChange={e => setFormData({ ...formData, apodo: e.target.value })} className="w-full p-2 border rounded font-bold text-navy" placeholder="Ej: Ricardinho" />
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre Deportivo</label>
+                            <input value={formData.apodo} onChange={e => setFormData({ ...formData, apodo: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl font-bold text-white outline-none focus:border-orange transition-colors animate-all" placeholder="Ej: Ricardinho" />
                         </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-xs font-bold text-navy mb-1">Nombre</label><input value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} className="w-full p-2 border rounded" /></div>
-                        <div><label className="block text-xs font-bold text-navy mb-1">Apellidos</label><input value={formData.apellidos} onChange={e => setFormData({ ...formData, apellidos: e.target.value })} className="w-full p-2 border rounded" /></div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">1ª Nacionalidad</label>
-                            <select value={formData.pais1} onChange={e => setFormData({ ...formData, pais1: e.target.value })} className="w-full p-2 border rounded bg-white">
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre</label>
+                            <input value={formData.nombre} onChange={e => setFormData({ ...formData, nombre: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Apellidos</label>
+                            <input value={formData.apellidos} onChange={e => setFormData({ ...formData, apellidos: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors" />
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">1ª Nacionalidad</label>
+                            <select value={formData.pais1} onChange={e => setFormData({ ...formData, pais1: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="">-- Seleccionar --</option>
                                 {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">2ª Nacionalidad</label>
-                            <select value={formData.pais2} onChange={e => setFormData({ ...formData, pais2: e.target.value })} className="w-full p-2 border rounded bg-white">
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">2ª Nacionalidad</label>
+                            <select value={formData.pais2} onChange={e => setFormData({ ...formData, pais2: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="">Ninguna</option>
                                 {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                             </select>
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                        <div><label className="block text-xs font-bold text-navy mb-1">Fecha Nacimiento</label><input type="date" value={formData.nacimiento} onChange={e => setFormData({ ...formData, nacimiento: e.target.value })} className="w-full p-2 border rounded" /></div>
                         <div>
-                            <label className="block text-xs font-bold text-navy mb-1">Posición Principal</label>
-                            <select value={formData.pos1} onChange={e => setFormData({ ...formData, pos1: e.target.value })} className="w-full p-2 border rounded bg-white">
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Fecha Nacimiento</label>
+                            <input type="date" value={formData.nacimiento} onChange={e => setFormData({ ...formData, nacimiento: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors" />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Posición Principal</label>
+                            <select value={formData.pos1} onChange={e => setFormData({ ...formData, pos1: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer font-display">
                                 {POSICIONES.map(p => <option key={p} value={p}>{p}</option>)}
                             </select>
                         </div>
                     </div>
                     <div>
-                        <label className="block text-xs font-bold text-navy mb-1">Posición Secundaria (Opcional)</label>
-                        <select value={formData.pos2} onChange={e => setFormData({ ...formData, pos2: e.target.value })} className="w-full p-2 border rounded bg-white text-gray-600">
+                        <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Posición Secundaria (Opcional)</label>
+                        <select value={formData.pos2} onChange={e => setFormData({ ...formData, pos2: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white/70 outline-none focus:border-orange transition-colors font-bold cursor-pointer font-display">
                             <option value="">-- Ninguna --</option>
                             {POSICIONES.map(p => <option key={p} value={p}>{p}</option>)}
                         </select>
                     </div>
-                    <div className="flex justify-end gap-3 pt-4 border-t">
-                        <button onClick={() => setModalFormOpen(false)} className="px-4 py-2 text-gray-500">Cancelar</button>
-                        <button onClick={guardar} className="bg-navy text-white px-6 py-2 rounded font-medium shadow-md">Guardar</button>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                        <button onClick={() => setModalFormOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>
@@ -390,6 +415,23 @@ export default function Jugadores() {
                         </div>
                     </div>
                 </div>
+            )}
+
+            {isDeleteConfirmOpen && jugadorABorrar && (
+                <Modal isOpen={isDeleteConfirmOpen} onClose={() => setIsDeleteConfirmOpen(false)} title="Eliminar Jugador">
+                    <div className="space-y-4 text-white">
+                        <p className="text-sm text-silver/80">
+                            ¿Estás seguro de que deseas eliminar de forma permanente a <strong className="text-orange">{jugadorABorrar.nombre_deportivo}</strong>?
+                        </p>
+                        <p className="text-xs text-red bg-red/10 border border-red/25 p-3 rounded-xl">
+                            ⚠️ Esta acción es irreversible. Se eliminará permanentemente su ficha y todo su historial de temporadas y estadísticas en el sistema.
+                        </p>
+                        <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                            <button onClick={() => setIsDeleteConfirmOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                            <button onClick={ejecutarBorradoJugador} className="bg-red hover:bg-red/80 text-white px-6 py-2 rounded-xl font-bold shadow-md transition-all">Eliminar permanentemente</button>
+                        </div>
+                    </div>
+                </Modal>
             )}
         </div>
     );

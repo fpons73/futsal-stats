@@ -1,9 +1,19 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import Database from "@tauri-apps/plugin-sql";
-import { convertFileSrc } from "@tauri-apps/api/core";
-import { ArrowLeft, Plus, Trash2, ArrowRightLeft, Save, Crown, User, Activity, Goal, XCircle, Minus } from "lucide-react";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
+import {
+    ArrowLeft, Plus, Trash2, Save, Crown, User, Globe,
+    Gavel, MapPin, FileText
+} from "lucide-react";
 import Modal from "../components/Modal";
+import { CampoFutsal } from "../components/CampoFutsal";
+import { ModalEvento } from "../components/ModalEvento";
+import { EstadisticasPartido } from "../components/EstadisticasPartido";
+import { EstadisticasJugadorPartido } from "../components/EstadisticasJugadorPartido";
+import { ValoracionesPartido } from "../components/ValoracionesPartido";
+import { TandaPenaltisPartido } from "../components/TandaPenaltisPartido";
+import { generarActaPartido } from "../utils/pdfGenerator";
 
 // --- INTERFACES ---
 interface PartidoDetalle {
@@ -11,9 +21,17 @@ interface PartidoDetalle {
     local_nombre: string; local_escudo: string;
     visitante_nombre: string; visitante_escudo: string;
     goles_local: number; goles_visitante: number;
+    goles_descanso_local: number; goles_descanso_visitante: number;
     estado: string;
     local_id: number; visitante_id: number;
     edicion_id: number;
+    estadio_nombre?: string;
+    arbitro_nombre?: string;
+    arbitro_2_nombre?: string;
+    arbitro_3_nombre?: string;
+    fecha?: string;
+    formacion_local?: string;
+    formacion_visitante?: string;
 }
 
 type EstadoConvocatoria = 'titular' | 'suplente' | 'convocado' | 'no_convocado';
@@ -29,6 +47,7 @@ interface PersonaAlineada {
     estado: EstadoConvocatoria;
     es_capitan: boolean;
     es_entrenador: boolean;
+    fecha_nacimiento?: string;
 }
 
 interface Evento {
@@ -43,19 +62,20 @@ interface Evento {
 
 interface Bandera { id: number; path: string; }
 
-interface StatsEquipo {
-    posesion: number;
-    corners: number;
-    faltas: number;
-    amarillas: number;
-    rojas: number;
-}
-
 // --- COMPONENTE AVATAR ---
-const Avatar = ({ path, alt, className }: { path: string | null, alt: string, className?: string }) => {
-    if (!path) return <div className={`bg-gray-200 flex items-center justify-center text-gray-400 ${className}`}><User size={14} /></div>;
-    return <img src={convertFileSrc(path)} alt={alt} className={`object-cover ${className}`} loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('bg-gray-200'); }} />;
+const Avatar = ({ path, alt, className = "w-full h-full" }: { path: string | null, alt: string, className?: string }) => {
+    if (!path) return <div className={`bg-navy-light flex items-center justify-center text-silver/40 ${className}`}><User size={14} /></div>;
+    return <img src={convertFileSrc(path)} alt={alt} className={`object-cover ${className}`} loading="lazy" onError={(e) => { e.currentTarget.style.display = 'none'; e.currentTarget.parentElement?.classList.add('bg-navy-light'); }} />;
 };
+
+const TABS = [
+    { id: "alineaciones", label: "Alineaciones" },
+    { id: "eventos", label: "Eventos" },
+    { id: "estadisticas", label: "Estadísticas" },
+    { id: "jugadores", label: "Por Jugador" },
+    { id: "valoraciones", label: "Valoraciones" },
+    { id: "penaltis", label: "Tanda Penaltis" },
+];
 
 export default function DetallePartido() {
     const { id } = useParams();
@@ -72,20 +92,28 @@ export default function DetallePartido() {
     // Eventos
     const [eventos, setEventos] = useState<Evento[]>([]);
     const [modalEventoOpen, setModalEventoOpen] = useState(false);
-    const [formEvento, setFormEvento] = useState({
-        minuto: "", tipo: "GOL", subtipo: "JUGADA", equipo_id: "", jugador_id: "", extra_id: ""
-    });
+    const [eventoAEditar, setEventoAEditar] = useState<any>(null);
+    const [defaultTipoEvento, setDefaultTipoEvento] = useState<string | undefined>(undefined);
 
-    // ESTADÍSTICAS
-    const [statsLocal, setStatsLocal] = useState<StatsEquipo>({ posesion: 50, corners: 0, faltas: 0, amarillas: 0, rojas: 0 });
-    const [statsVisitante, setStatsVisitante] = useState<StatsEquipo>({ posesion: 50, corners: 0, faltas: 0, amarillas: 0, rojas: 0 });
+    // Formaciones
+    const [formacionLocal, setFormacionLocal] = useState<string>("1-3-1");
+    const [formacionVisitante, setFormacionVisitante] = useState<string>("1-3-1");
+
+    // SCRAPING ESTADOS
+    const [modalScrapeOpen, setModalScrapeOpen] = useState(false);
+    const [ceroaceroUrl, setCeroaceroUrl] = useState("");
+    const [isScraping, setIsScraping] = useState(false);
+    const [scrapedLocal, setScrapedLocal] = useState<any[]>([]);
+    const [scrapedVisitante, setScrapedVisitante] = useState<any[]>([]);
+    const [mappingsLocal, setMappingsLocal] = useState<Record<string, string>>({});
+    const [mappingsVisitante, setMappingsVisitante] = useState<Record<string, string>>({});
+    const [modalMappingOpen, setModalMappingOpen] = useState(false);
 
     useEffect(() => {
         if (id) {
             cargarBanderas();
             cargarPartido();
             cargarEventos();
-            cargarEstadisticasDB();
         }
     }, [id]);
 
@@ -99,15 +127,28 @@ export default function DetallePartido() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             const res = await db.select<PartidoDetalle[]>(`
-          SELECT p.*, l.nombre as local_nombre, l.escudo_path as local_escudo,
-                 v.nombre as visitante_nombre, v.escudo_path as visitante_escudo
-          FROM Partido p JOIN Equipo l ON p.local_id = l.id JOIN Equipo v ON p.visitante_id = v.id
-          WHERE p.id = $1
-        `, [id]);
+                SELECT p.*, l.nombre as local_nombre, l.escudo_path as local_escudo,
+                       v.nombre as visitante_nombre, v.escudo_path as visitante_escudo,
+                       est.nombre as estadio_nombre,
+                       a1.nombre_deportivo as arbitro_nombre,
+                       a2.nombre_deportivo as arbitro_2_nombre,
+                       a3.nombre_deportivo as arbitro_3_nombre
+                FROM Partido p 
+                JOIN Equipo l ON p.local_id = l.id 
+                JOIN Equipo v ON p.visitante_id = v.id
+                LEFT JOIN Estadio est ON p.estadio_id = est.id
+                LEFT JOIN Persona a1 ON p.arbitro_id = a1.id
+                LEFT JOIN Persona a2 ON p.arbitro_2_id = a2.id
+                LEFT JOIN Persona a3 ON p.arbitro_3_id = a3.id
+                WHERE p.id = $1
+            `, [id]);
 
             if (res.length > 0) {
-                setPartido(res[0]);
-                if (plantillaLocal.length === 0) cargarPlantillas(res[0].edicion_id, res[0].local_id, res[0].visitante_id);
+                const p = res[0];
+                setPartido(p);
+                if (p.formacion_local) setFormacionLocal(p.formacion_local);
+                if (p.formacion_visitante) setFormacionVisitante(p.formacion_visitante);
+                if (plantillaLocal.length === 0) cargarPlantillas(p.edicion_id, p.local_id, p.visitante_id);
             }
         } catch (e) { console.error(e); }
     }
@@ -117,12 +158,12 @@ export default function DetallePartido() {
             const db = await Database.load("sqlite:globalfutsal.db");
 
             const getPersonas = async (eqId: number) => {
-                // Cargar todas las personas de la plantilla
                 const plantilla = await db.select<PersonaAlineada[]>(`
                     SELECT p.id as persona_id, p.nombre_deportivo as nombre, pl.dorsal, p.foto_path as foto,
                     p.posicion_principal as posicion,
                     p.nacionalidad_principal_id as nacionalidad_id,
                     p.nacionalidades_secundarias as nacionalidad2_id,
+                    p.fecha_nacimiento,
                     CASE WHEN pl.rol = 'Entrenador' THEN 1 ELSE 0 END as es_entrenador
                     FROM Plantilla pl
                     JOIN Persona p ON pl.persona_id = p.id
@@ -130,29 +171,24 @@ export default function DetallePartido() {
                     ORDER BY pl.rol DESC, pl.dorsal ASC 
                 `, [edicionId, eqId]);
 
-                // Cargar alineaciones guardadas para este partido
                 const alineaciones = await db.select<any[]>(`
                     SELECT persona_id, titular, es_capitan
                     FROM Alineacion
                     WHERE partido_id = $1 AND equipo_id = $2
                 `, [id, eqId]);
 
-                // Crear un mapa de alineaciones para búsqueda rápida
                 const alineacionMap = new Map(alineaciones.map(a => [a.persona_id, a]));
 
-                // Combinar plantilla con alineaciones
                 return plantilla.map(p => {
                     const alineacion = alineacionMap.get(p.persona_id);
                     let estado: EstadoConvocatoria = 'no_convocado';
                     let es_capitan = false;
 
                     if (alineacion) {
-                        // Para entrenadores, siempre es 'convocado'
                         if (p.es_entrenador) {
                             estado = 'convocado';
                         } else {
-                            // Para jugadores, titular o suplente
-                            estado = alineacion.titular === 1 ? 'titular' : 'suplente';
+                            estado = alineacion.titular === 1 ? 'titular' : (alineacion.titular === 2 ? 'convocado' : 'suplente');
                         }
                         es_capitan = alineacion.es_capitan === 1;
                     }
@@ -166,45 +202,184 @@ export default function DetallePartido() {
         } catch (e) { console.error(e); }
     }
 
-    // --- LÓGICA ESTADÍSTICAS ---
-    async function cargarEstadisticasDB() {
+    // --- LÓGICA DE SCRAPING DE CEROACERO ---
+    const normalizeName = (name: string) => {
+        return name.toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9\s]/g, "")
+            .trim();
+    };
+
+    const findBestMatch = (scrapedName: string, dbList: PersonaAlineada[]) => {
+        const cleanScraped = normalizeName(scrapedName);
+        const exact = dbList.find(p => normalizeName(p.nombre) === cleanScraped);
+        if (exact) return exact.persona_id.toString();
+        const partial = dbList.find(p => {
+            const cleanDb = normalizeName(p.nombre);
+            return cleanDb.includes(cleanScraped) || cleanScraped.includes(cleanDb);
+        });
+        if (partial) return partial.persona_id.toString();
+        const parts = cleanScraped.split(/\s+/);
+        const wordMatch = dbList.find(p => {
+            const cleanDb = normalizeName(p.nombre);
+            return parts.some(part => part.length > 3 && cleanDb.includes(part));
+        });
+        if (wordMatch) return wordMatch.persona_id.toString();
+        return "";
+    };
+
+    const handleStartScraping = async () => {
+        if (!ceroaceroUrl) return alert("Por favor introduce una URL válida");
+        setIsScraping(true);
         try {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            const res = await db.select<any[]>("SELECT * FROM EstadisticaPartidoEquipo WHERE partido_id = $1", [id]);
-
-            if (res.length > 0) {
-                res.forEach(row => {
-                    const stats = {
-                        posesion: row.posesion || 50,
-                        corners: row.corners || 0,
-                        faltas: row.faltas || 0,
-                        amarillas: 0,
-                        rojas: 0
-                    };
-                    if (row.equipo_id == partido?.local_id) setStatsLocal(prev => ({ ...prev, ...stats }));
-                    else setStatsVisitante(prev => ({ ...prev, ...stats }));
-                });
+            const html = await invoke<string>("fetch_html", { url: ceroaceroUrl });
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, "text/html");
+            const columns = doc.querySelectorAll('.zz-tpl-col');
+            if (columns.length < 4) {
+                throw new Error("No se pudo detectar la estructura de alineaciones.");
             }
-        } catch (e) { console.error(e); }
-    }
+            const parsePlayers = (col: Element, isStarter: boolean, isCoach: boolean) => {
+                if (!col) return [];
+                const players: any[] = [];
+                const playerElements = col.querySelectorAll('.player');
+                playerElements.forEach(el => {
+                    const numEl = el.querySelector('.number');
+                    const nameLink = el.querySelector('.name a');
+                    if (nameLink) {
+                        const name = nameLink.textContent?.trim() || "";
+                        const numberStr = numEl?.textContent?.replace(/\u00a0/g, '').trim() || "";
+                        const number = parseInt(numberStr) || 0;
+                        const eventsDiv = el.querySelector('.events');
+                        const events: any[] = [];
+                        if (eventsDiv) {
+                            const spans = eventsDiv.querySelectorAll('span');
+                            spans.forEach(span => {
+                                const title = span.getAttribute('title') || "";
+                                const nextDiv = span.nextElementSibling;
+                                if (nextDiv && nextDiv.tagName.toLowerCase() === 'div') {
+                                    const minStr = nextDiv.textContent || "";
+                                    const regex = /(\d+)'\s*(?:\((p|p\.|p\.p\.)\))?/gi;
+                                    let match;
+                                    while ((match = regex.exec(minStr)) !== null) {
+                                        const minute = parseInt(match[1]);
+                                        const mod = match[2];
+                                        let type = "GOL";
+                                        let subtipo: string | null = "JUGADA";
+                                        if (title.toLowerCase().includes('amarilla') || span.classList.contains('yellow')) {
+                                            type = "TARJETA_AMARILLA"; subtipo = null;
+                                        } else if (title.toLowerCase().includes('roja') || span.classList.contains('red')) {
+                                            type = "TARJETA_ROJA"; subtipo = null;
+                                        } else if (title.toLowerCase().includes('doble') || title.toLowerCase().includes('segunda')) {
+                                            type = "DOBLE_AMARILLA"; subtipo = null;
+                                        } else if (mod === 'p.' || mod === 'p') {
+                                            type = "GOL"; subtipo = "PENALTI";
+                                        } else if (mod === 'p.p.') {
+                                            type = "GOL"; subtipo = "PROPIA_PUERTA";
+                                        }
+                                        events.push({ minute, type, subtipo });
+                                    }
+                                }
+                            });
+                        }
+                        players.push({ name, number, isStarter, isCoach, events });
+                    }
+                });
+                return players;
+            };
+            const scrapedLocStarters = parsePlayers(columns[0], true, false);
+            const scrapedVisStarters = parsePlayers(columns[1], true, false);
+            const scrapedLocSubs = parsePlayers(columns[2], false, false);
+            const scrapedVisSubs = parsePlayers(columns[3], false, false);
+            const scrapedLocCoaches = columns[4] ? parsePlayers(columns[4], false, true) : [];
+            const scrapedVisCoaches = columns[5] ? parsePlayers(columns[5], false, true) : [];
+            const localAll = [...scrapedLocStarters, ...scrapedLocSubs, ...scrapedLocCoaches];
+            const visitanteAll = [...scrapedVisStarters, ...scrapedVisSubs, ...scrapedVisCoaches];
+            setScrapedLocal(localAll);
+            setScrapedVisitante(visitanteAll);
+            const mapL: Record<string, string> = {};
+            localAll.forEach(p => { mapL[p.name] = findBestMatch(p.name, plantillaLocal); });
+            setMappingsLocal(mapL);
+            const mapV: Record<string, string> = {};
+            visitanteAll.forEach(p => { mapV[p.name] = findBestMatch(p.name, plantillaVisitante); });
+            setMappingsVisitante(mapV);
+            setModalScrapeOpen(false);
+            setModalMappingOpen(true);
+        } catch (e: any) {
+            console.error(e);
+            alert("Error al scrapear el partido: " + e.message);
+        } finally {
+            setIsScraping(false);
+        }
+    };
 
-    async function guardarEstadisticas() {
+    const handleConfirmImport = async () => {
         if (!partido) return;
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
-            const guardarEquipo = async (eqId: number, s: StatsEquipo) => {
-                const existe = await db.select<any[]>("SELECT id FROM EstadisticaPartidoEquipo WHERE partido_id=$1 AND equipo_id=$2", [id, eqId]);
-                if (existe.length > 0) {
-                    await db.execute("UPDATE EstadisticaPartidoEquipo SET posesion=$1, corners=$2, faltas=$3 WHERE partido_id=$4 AND equipo_id=$5", [s.posesion, s.corners, s.faltas, id, eqId]);
-                } else {
-                    await db.execute("INSERT INTO EstadisticaPartidoEquipo (partido_id, equipo_id, posesion, corners, faltas) VALUES ($1, $2, $3, $4, $5)", [id, eqId, s.posesion, s.corners, s.faltas]);
+            await db.execute("DELETE FROM Alineacion WHERE partido_id = $1", [id]);
+            await db.execute("DELETE FROM Evento WHERE partido_id = $1", [id]);
+            let golesLoc = 0, golesVis = 0, golesDescansoLoc = 0, golesDescansoVis = 0;
+            const importarEquipo = async (scraped: any[], mappings: Record<string, string>, plantilla: PersonaAlineada[], eqId: number) => {
+                for (const p of scraped) {
+                    const dbPersonaIdStr = mappings[p.name];
+                    if (!dbPersonaIdStr) continue;
+                    const dbPersonaId = parseInt(dbPersonaIdStr);
+                    const dbPersona = plantilla.find(x => x.persona_id === dbPersonaId);
+                    const dorsal = dbPersona ? dbPersona.dorsal : p.number;
+                    const posicion = dbPersona ? dbPersona.posicion : 'Jugador';
+                    await db.execute(`
+                        INSERT INTO Alineacion (partido_id, equipo_id, persona_id, titular, dorsal, posicion, es_capitan, entrenador_id)
+                        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                    `, [id, eqId, dbPersonaId, p.isStarter ? 1 : 0, dorsal, posicion, 0, null]);
+                    for (const ev of p.events) {
+                        await db.execute(`
+                            INSERT INTO Evento (partido_id, minuto, tipo, subtipo, equipo_id, jugador_id, asistente_id)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                        `, [id, ev.minute, ev.type, ev.subtipo, eqId, dbPersonaId, null]);
+                        if (ev.type === "GOL") {
+                            if (ev.subtipo === "PROPIA_PUERTA") {
+                                golesVis++; if (ev.minute <= 20) golesDescansoVis++;
+                            } else {
+                                golesLoc++; if (ev.minute <= 20) golesDescansoLoc++;
+                            }
+                        }
+                    }
                 }
             };
-            await guardarEquipo(partido.local_id, statsLocal);
-            await guardarEquipo(partido.visitante_id, statsVisitante);
-            alert("Estadísticas guardadas correctamente");
-        } catch (e) { console.error(e); alert("Error al guardar"); }
-    }
+            await importarEquipo(scrapedLocal, mappingsLocal, plantillaLocal, partido.local_id);
+            // For visitante, GOL increments golesLoc (wrong) — fix by tracking separately
+            const golesVisAntes = golesVis;
+            const golesDescansoVisAntes = golesDescansoVis;
+            const golesLocAntes = golesLoc;
+            const golesDescansoLocAntes = golesDescansoLoc;
+            await importarEquipo(scrapedVisitante, mappingsVisitante, plantillaVisitante, partido.visitante_id);
+            // After visitante import, golesLoc has visitante's goals added incorrectly
+            // Correct: visitante goals = golesLoc - golesLocAntes, local goals stay as golesLocAntes
+            const visitanteGoles = golesLoc - golesLocAntes;
+            const visitanteDescanso = golesDescansoLoc - golesDescansoLocAntes;
+            const totalGolesLoc = golesLocAntes;
+            const totalGolesVis = golesVisAntes + visitanteGoles;
+            const totalDescansoLoc = golesDescansoLocAntes;
+            const totalDescansoVis = golesDescansoVisAntes + visitanteDescanso;
+            await db.execute(`
+                UPDATE Partido SET 
+                goles_local = $1, goles_visitante = $2, 
+                goles_descanso_local = $3, goles_descanso_visitante = $4,
+                estado = 'finalizado'
+                WHERE id = $5
+            `, [totalGolesLoc, totalGolesVis, totalDescansoLoc, totalDescansoVis, id]);
+            setModalMappingOpen(false);
+            await cargarPartido();
+            await cargarEventos();
+            if (partido) await cargarPlantillas(partido.edicion_id, partido.local_id, partido.visitante_id);
+            alert("Partido importado y guardado correctamente.");
+        } catch (e) {
+            console.error(e);
+            alert("Error al guardar la importación");
+        }
+    };
 
     // --- LÓGICA ALINEACIÓN ---
     const cambiarEstado = (esLocal: boolean, personaId: number, nuevoEstado: EstadoConvocatoria) => {
@@ -213,7 +388,7 @@ export default function DetallePartido() {
             const nueva = prev.map(p => p.persona_id === personaId ? { ...p, estado: nuevoEstado } : p);
             if (nuevoEstado === 'titular') {
                 const titulares = nueva.filter(j => j.estado === 'titular' && !j.es_entrenador).length;
-                if (titulares > 5) { alert("Máximo 5 titulares."); return prev; }
+                if (titulares > 5) { alert("Máximo 5 titulares en futsal."); return prev; }
             }
             return nueva;
         });
@@ -228,113 +403,65 @@ export default function DetallePartido() {
         if (!partido) return;
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
-
-            // Eliminar alineaciones existentes de este partido
             await db.execute("DELETE FROM Alineacion WHERE partido_id = $1", [id]);
-
-            // Guardar alineaciones del equipo local
-            for (const persona of plantillaLocal) {
-                if (persona.estado !== 'no_convocado') {
-                    const titular = persona.estado === 'titular' ? 1 : 0;
-                    await db.execute(`
-                        INSERT INTO Alineacion (partido_id, equipo_id, persona_id, titular, dorsal, posicion, es_capitan)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7)
-                    `, [id, partido.local_id, persona.persona_id, titular, persona.dorsal, persona.posicion, persona.es_capitan ? 1 : 0]);
+            const guardarEquipo = async (lista: PersonaAlineada[], eqId: number) => {
+                for (const persona of lista) {
+                    if (persona.estado !== 'no_convocado') {
+                        const titular = persona.estado === 'titular' ? 1 : (persona.estado === 'convocado' ? 2 : 0);
+                        await db.execute(`
+                            INSERT INTO Alineacion (partido_id, equipo_id, persona_id, titular, dorsal, posicion, es_capitan)
+                            VALUES ($1, $2, $3, $4, $5, $6, $7)
+                        `, [id, eqId, persona.persona_id, titular, persona.dorsal, persona.posicion, persona.es_capitan ? 1 : 0]);
+                    }
                 }
-            }
-
-            // Guardar alineaciones del equipo visitante
-            for (const persona of plantillaVisitante) {
-                if (persona.estado !== 'no_convocado') {
-                    const titular = persona.estado === 'titular' ? 1 : 0;
-                    await db.execute(`
-                        INSERT INTO Alineacion (partido_id, equipo_id, persona_id, titular, dorsal, posicion, es_capitan)
-                        VALUES ($1, $2, $3, $4, $5, $6, $7)
-                    `, [id, partido.visitante_id, persona.persona_id, titular, persona.dorsal, persona.posicion, persona.es_capitan ? 1 : 0]);
-                }
-            }
-
-            alert("Alineaciones guardadas correctamente ✅");
+            };
+            await guardarEquipo(plantillaLocal, partido.local_id);
+            await guardarEquipo(plantillaVisitante, partido.visitante_id);
+            // Guardar formaciones
+            await db.execute(
+                "UPDATE Partido SET formacion_local = $1, formacion_visitante = $2 WHERE id = $3",
+                [formacionLocal, formacionVisitante, id]
+            );
+            setPartido(prev => prev ? { ...prev, formacion_local: formacionLocal, formacion_visitante: formacionVisitante } : null);
+            alert("Acta oficial guardada correctamente.");
         } catch (e) {
             console.error(e);
             alert("Error al guardar las alineaciones");
         }
     }
 
-    const getFlagSrc = (id: number) => {
-        const f = paises.find(p => p.id === id);
+    const getFlagSrc = (natId: number) => {
+        const f = paises.find(p => p.id === natId);
         return f ? convertFileSrc(f.path) : null;
     };
 
-    const renderListaEquipo = (lista: PersonaAlineada[], esLocal: boolean) => {
-        const entrenadores = lista.filter(p => p.es_entrenador);
-        const jugadores = lista.filter(p => !p.es_entrenador);
-
-        const scorePos = (pos: string) => { if (pos === 'Portero') return 1; if (pos === 'Cierre') return 2; if (pos === 'Ala') return 3; if (pos === 'Pívot') return 4; return 5; };
-        const scoreEstado = (s: string) => { if (s === 'titular') return 1; if (s === 'suplente') return 2; if (s === 'convocado') return 3; return 4; };
-
-        const jugadoresOrdenados = [...jugadores].sort((a, b) => {
-            if (scoreEstado(a.estado) !== scoreEstado(b.estado)) return scoreEstado(a.estado) - scoreEstado(b.estado);
-            return scorePos(a.posicion) - scorePos(b.posicion);
-        });
-
+    const renderFlags = (nacionalidad_id: number, nacionalidad2_id?: string) => {
+        const flagIds: number[] = [nacionalidad_id];
+        if (nacionalidad2_id) {
+            const trimmed = nacionalidad2_id.trim();
+            if (trimmed.startsWith('[')) {
+                try {
+                    const parsed = JSON.parse(trimmed);
+                    if (Array.isArray(parsed)) {
+                        parsed.forEach(x => {
+                            const num = parseInt(x);
+                            if (!isNaN(num) && !flagIds.includes(num)) flagIds.push(num);
+                        });
+                    }
+                } catch {}
+            } else {
+                const num = parseInt(trimmed);
+                if (!isNaN(num) && !flagIds.includes(num)) flagIds.push(num);
+            }
+        }
         return (
-            <div className="flex-1 overflow-y-auto p-2 bg-gray-50/50">
-                {entrenadores.length > 0 && (
-                    <div className="mb-4 bg-white p-2 rounded border shadow-sm">
-                        <div className="text-[10px] font-bold text-gray-400 uppercase mb-1">Cuerpo Técnico</div>
-                        {entrenadores.map(ent => (
-                            <div key={ent.persona_id} className="flex items-center gap-2 mb-1">
-                                <div className="w-8 h-8 rounded-full overflow-hidden border bg-gray-200"><Avatar path={ent.foto} alt="" /></div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="text-sm font-bold text-navy">{ent.nombre}</div>
-                                    <div className="flex items-center gap-1 mt-0.5">
-                                        {getFlagSrc(ent.nacionalidad_id) && <img src={getFlagSrc(ent.nacionalidad_id)!} className="w-3 h-2 shadow-sm" alt="nac" />}
-                                        <span className="text-[9px] text-gray-500 uppercase font-semibold">Entrenador</span>
-                                    </div>
-                                </div>
-                                <div className="flex gap-1">
-                                    <button onClick={() => cambiarEstado(esLocal, ent.persona_id, 'convocado')} className={`px-2 py-0.5 text-[9px] font-bold rounded ${ent.estado === 'convocado' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400'}`}>CON</button>
-                                    <button onClick={() => cambiarEstado(esLocal, ent.persona_id, 'no_convocado')} className={`px-2 py-0.5 text-[9px] font-bold rounded ${ent.estado === 'no_convocado' ? 'bg-red-100 text-red-500' : 'bg-gray-100 text-gray-400'}`}>X</button>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-                <div className="space-y-1">
-                    {jugadoresOrdenados.map(jug => {
-                        let bg = "bg-white opacity-60 grayscale";
-                        if (jug.estado === 'titular') bg = "bg-yellow-50 border-yellow-300 opacity-100 shadow-sm";
-                        if (jug.estado === 'suplente') bg = "bg-green-50 border-green-300 opacity-100";
-                        if (jug.estado === 'convocado') bg = "bg-blue-50 border-blue-200 opacity-100";
-
-                        return (
-                            <div key={jug.persona_id} className={`flex items-center gap-2 p-1.5 rounded border ${bg} transition-all`}>
-                                <div className="w-6 text-center font-black text-navy">{jug.dorsal}</div>
-                                <div className="w-8 h-8 rounded-full overflow-hidden border bg-gray-200 shrink-0"><Avatar path={jug.foto} alt="" /></div>
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-bold text-navy truncate text-sm">{jug.nombre}</span>
-                                        {jug.es_capitan && <Crown size={12} className="text-yellow-600 fill-yellow-400" />}
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <div className="flex gap-0.5">
-                                            {getFlagSrc(jug.nacionalidad_id) && <img src={getFlagSrc(jug.nacionalidad_id)!} className="w-3 h-2 shadow-sm" />}
-                                        </div>
-                                        <span className="text-[9px] text-gray-500 uppercase font-semibold">{jug.posicion}</span>
-                                    </div>
-                                </div>
-                                <div className="flex gap-0.5">
-                                    <button onClick={() => cambiarEstado(esLocal, jug.persona_id, 'titular')} className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${jug.estado === 'titular' ? 'bg-yellow-400 text-black' : 'bg-gray-100 text-gray-400'}`}>TIT</button>
-                                    <button onClick={() => cambiarEstado(esLocal, jug.persona_id, 'suplente')} className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${jug.estado === 'suplente' ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-400'}`}>SUP</button>
-                                    <button onClick={() => cambiarEstado(esLocal, jug.persona_id, 'convocado')} className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${jug.estado === 'convocado' ? 'bg-blue-400 text-white' : 'bg-gray-100 text-gray-400'}`}>CON</button>
-                                    <button onClick={() => toggleCapitan(esLocal, jug.persona_id)} className={`p-1 rounded ${jug.es_capitan ? 'text-yellow-600' : 'text-gray-300 hover:text-yellow-600'}`}><Crown size={12} /></button>
-                                    <button onClick={() => cambiarEstado(esLocal, jug.persona_id, 'no_convocado')} className="px-1.5 py-0.5 text-[9px] text-red-400 hover:bg-red-50 rounded">X</button>
-                                </div>
-                            </div>
-                        )
-                    })}
-                </div>
+            <div className="flex gap-1 shrink-0">
+                {flagIds.map(fid => {
+                    const src = getFlagSrc(fid);
+                    return src ? (
+                        <img key={fid} src={src} className="w-3.5 h-2.5 rounded-sm shadow-sm border border-white/5 object-cover" alt="flag" />
+                    ) : null;
+                })}
             </div>
         );
     };
@@ -344,287 +471,506 @@ export default function DetallePartido() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             const res = await db.select<Evento[]>(`
-            SELECT e.id, e.minuto, e.tipo, e.subtipo, e.equipo_id, p1.nombre_deportivo as jugador_nombre, p2.nombre_deportivo as asistente_nombre
-            FROM Evento e LEFT JOIN Persona p1 ON e.jugador_id = p1.id LEFT JOIN Persona p2 ON e.asistente_id = p2.id
-            WHERE e.partido_id = $1 ORDER BY e.minuto DESC, e.id DESC
-        `, [id]);
+                SELECT e.id, e.minuto, e.tipo, e.subtipo, e.equipo_id, 
+                       p1.nombre_deportivo as jugador_nombre, p2.nombre_deportivo as asistente_nombre
+                FROM Evento e 
+                LEFT JOIN Persona p1 ON e.jugador_id = p1.id 
+                LEFT JOIN Persona p2 ON e.asistente_id = p2.id
+                WHERE e.partido_id = $1 ORDER BY e.minuto ASC, e.id ASC
+            `, [id]);
             setEventos(res);
-            calcularTarjetas(res);
         } catch (e) { console.error(e); }
     }
 
-    function calcularTarjetas(listaEventos: Evento[]) {
-        if (!partido) return;
-        const amarillasL = listaEventos.filter(e => (e.tipo === 'TARJETA_AMARILLA' || e.tipo === 'DOBLE_AMARILLA') && e.equipo_id === partido.local_id).length;
-        const rojasL = listaEventos.filter(e => (e.tipo === 'TARJETA_ROJA' || e.tipo === 'DOBLE_AMARILLA') && e.equipo_id === partido.local_id).length;
-        const amarillasV = listaEventos.filter(e => (e.tipo === 'TARJETA_AMARILLA' || e.tipo === 'DOBLE_AMARILLA') && e.equipo_id === partido.visitante_id).length;
-        const rojasV = listaEventos.filter(e => (e.tipo === 'TARJETA_ROJA' || e.tipo === 'DOBLE_AMARILLA') && e.equipo_id === partido.visitante_id).length;
-
-        setStatsLocal(p => ({ ...p, amarillas: amarillasL, rojas: rojasL }));
-        setStatsVisitante(p => ({ ...p, amarillas: amarillasV, rojas: rojasV }));
-    }
-
-    function abrirModalEvento() {
-        if (!partido) return;
-        setFormEvento({ minuto: "", tipo: "GOL", subtipo: "JUGADA", equipo_id: partido.local_id.toString(), jugador_id: "", extra_id: "" });
-        setModalEventoOpen(true);
-    }
-
-    async function guardarEvento() {
-        if (!formEvento.minuto || !formEvento.jugador_id) return alert("Faltan datos");
-        try {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            const min = parseInt(formEvento.minuto);
-            await db.execute(
-                `INSERT INTO Evento (partido_id, minuto, tipo, subtipo, equipo_id, jugador_id, asistente_id) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-                [id, min, formEvento.tipo, formEvento.subtipo, formEvento.equipo_id, formEvento.jugador_id, formEvento.extra_id || null]
-            );
-            if (formEvento.tipo === "GOL") {
-                const esLocal = formEvento.equipo_id == partido?.local_id.toString();
-                const sumaAlLocal = (esLocal && formEvento.subtipo !== 'PROPIA_PUERTA') || (!esLocal && formEvento.subtipo === 'PROPIA_PUERTA');
-                let q = "UPDATE Partido SET ";
-                if (sumaAlLocal) { q += "goles_local = goles_local + 1"; if (min <= 20) q += ", goles_descanso_local = goles_descanso_local + 1"; }
-                else { q += "goles_visitante = goles_visitante + 1"; if (min <= 20) q += ", goles_descanso_visitante = goles_descanso_visitante + 1"; }
-                if (min > 40) q += ", prorroga = 1";
-                q += " WHERE id = $1";
-                await db.execute(q, [id]);
-                cargarPartido();
-            }
-            setModalEventoOpen(false);
-            cargarEventos();
-        } catch (e) { console.error(e); }
+    async function onEventoGuardado() {
+        setModalEventoOpen(false);
+        setEventoAEditar(null);
+        setDefaultTipoEvento(undefined);
+        await cargarEventos();
+        await cargarPartido();
     }
 
     async function borrarEvento(ev: Evento) {
-        if (!confirm("¿Borrar evento?")) return;
+        if (!confirm(`¿Eliminar evento del minuto ${ev.minuto}?`)) return;
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             await db.execute("DELETE FROM Evento WHERE id = $1", [ev.id]);
-            if (ev.tipo === "GOL") {
-                const esLocal = ev.equipo_id === partido?.local_id;
-                const restoAlLocal = (esLocal && ev.subtipo !== 'PROPIA_PUERTA') || (!esLocal && ev.subtipo === 'PROPIA_PUERTA');
+            // Recalcular marcador si era gol
+            if (ev.tipo === "GOL" && partido) {
+                const esLocal = ev.equipo_id === partido.local_id;
+                const sumaAlLocal = (esLocal && ev.subtipo !== 'PROPIA_PUERTA') || (!esLocal && ev.subtipo === 'PROPIA_PUERTA');
                 let q = "UPDATE Partido SET ";
-                if (restoAlLocal) { q += "goles_local = goles_local - 1"; if (ev.minuto <= 20) q += ", goles_descanso_local = goles_descanso_local - 1"; }
-                else { q += "goles_visitante = goles_visitante - 1"; if (ev.minuto <= 20) q += ", goles_descanso_visitante = goles_descanso_visitante - 1"; }
+                if (sumaAlLocal) {
+                    q += "goles_local = MAX(0, goles_local - 1)";
+                    if (ev.minuto <= 20) q += ", goles_descanso_local = MAX(0, goles_descanso_local - 1)";
+                } else {
+                    q += "goles_visitante = MAX(0, goles_visitante - 1)";
+                    if (ev.minuto <= 20) q += ", goles_descanso_visitante = MAX(0, goles_descanso_visitante - 1)";
+                }
                 q += " WHERE id = $1";
                 await db.execute(q, [id]);
-                cargarPartido();
+                await cargarPartido();
             }
-            cargarEventos();
+            await cargarEventos();
         } catch (e) { console.error(e); }
     }
 
     const renderEvento = (ev: Evento) => {
-        let icono = null; let color = ""; let texto = ev.jugador_nombre;
+        let icono = <span className="text-base">•</span>;
+        let color = "text-silver bg-white/5 border-white/10";
+        let texto = ev.jugador_nombre || "";
+        const esLocal = partido && ev.equipo_id === partido.local_id;
+        const equipoNombre = esLocal ? partido?.local_nombre : partido?.visitante_nombre;
+
         switch (ev.tipo) {
-            case "GOL": icono = <Goal size={18} />; color = "text-navy bg-blue-50 border-blue-100"; if (ev.subtipo === 'PROPIA_PUERTA') { texto += " (P.P.)"; color = "text-red-800 bg-red-50 border-red-100"; } else if (ev.subtipo) { texto += ` (${ev.subtipo.replace('_', ' ').toLowerCase()})`; } if (ev.asistente_nombre) texto += ` - Asist: ${ev.asistente_nombre}`; break;
-            case "TARJETA_AMARILLA": icono = <div className="w-3 h-4 bg-yellow-400 rounded-sm border border-yellow-500"></div>; color = "text-yellow-700 bg-yellow-50 border-yellow-100"; break;
-            case "DOBLE_AMARILLA": icono = <div className="flex"><div className="w-2 h-3 bg-yellow-400 -mr-1"></div><div className="w-2 h-3 bg-red-600 z-10"></div></div>; color = "text-orange-700 bg-orange-50 border-orange-100"; texto += " (2ª Amarilla)"; break;
-            case "TARJETA_ROJA": icono = <div className="w-3 h-4 bg-red-600 rounded-sm border border-red-700"></div>; color = "text-red-700 bg-red-50 border-red-100"; break;
-            case "CAMBIO": icono = <ArrowRightLeft size={16} className="text-green-600" />; color = "text-gray-600 bg-gray-50 border-gray-100"; texto = `Entra: ${ev.jugador_nombre} ⇆ Sale: ${ev.asistente_nombre}`; break;
-            case "LESION": icono = <Plus size={18} className="text-red-500" />; color = "text-red-600 bg-red-50"; texto += " (Lesión)"; break;
-            case "PENALTI_FALLADO": icono = <XCircle size={18} className="text-red-500" />; color = "text-gray-500 bg-gray-100"; texto += " (Falló Penalti)"; break;
-            case "DOBLE_PENALTI_FALLADO": icono = <XCircle size={18} className="text-orange-500" />; color = "text-gray-500 bg-gray-100"; texto += " (Falló Doble Penalti)"; break;
+            case "GOL":
+                icono = <span className="text-lg">⚽</span>;
+                color = "text-white bg-accent-blue/10 border-accent-blue/30";
+                if (ev.subtipo === "PROPIA_PUERTA") { texto += " (P.P.)"; color = "text-red bg-red/10 border-red/30"; }
+                else if (ev.subtipo === "PENALTI") texto += " (Penalti)";
+                else if (ev.subtipo === "DOBLE_PENALTI") texto += " (Doble Penalti)";
+                else if (ev.subtipo) texto += ` (${ev.subtipo.replace(/_/g, ' ').toLowerCase()})`;
+                if (ev.asistente_nombre) texto += ` — Asis: ${ev.asistente_nombre}`;
+                break;
+            case "TARJETA":
+                if (ev.subtipo === "Amarilla") { icono = <span className="text-base">🟨</span>; color = "text-yellow-400 bg-yellow-400/10 border-yellow-400/30"; }
+                else if (ev.subtipo === "2ª Amarilla") { icono = <span className="text-base">🟨🟨</span>; color = "text-orange bg-orange/10 border-orange/30"; texto += " (2ª Amarilla)"; }
+                else if (ev.subtipo === "Roja") { icono = <span className="text-base">🟥</span>; color = "text-red bg-red/10 border-red/30"; }
+                else if (ev.subtipo === "Azul") { icono = <span className="text-base">🟦</span>; color = "text-blue-400 bg-blue-400/10 border-blue-400/30"; texto += " (Azul)"; }
+                break;
+            case "CAMBIO":
+                icono = <span className="text-base">🔄</span>;
+                color = "text-silver bg-white/5 border-white/10";
+                texto = `Entra: ${ev.jugador_nombre} ⇆ Sale: ${ev.asistente_nombre || "—"}`;
+                break;
+            case "TIEMPO_MUERTO":
+                icono = <span className="text-base">⏱️</span>;
+                color = "text-orange bg-orange/10 border-orange/30";
+                texto = `Tiempo muerto — ${equipoNombre || ""}`;
+                break;
+            case "FALTA_ACUM":
+                icono = <span className="text-base">📊</span>;
+                color = "text-yellow-400 bg-yellow-400/10 border-yellow-400/30";
+                texto = `Falta acumulativa (${ev.minuto}') — ${equipoNombre || ""}`;
+                break;
+            case "LESION":
+                icono = <span className="text-base">🚑</span>;
+                color = "text-red bg-red/5 border-red/20";
+                texto += " (Lesión)";
+                break;
+            case "GOL_ANULADO":
+                icono = <span className="text-base">⛔</span>;
+                color = "text-silver bg-white/5 border-white/10";
+                texto += " (Gol Anulado)";
+                break;
+            case "TANDA_PENALTI":
+                icono = <span className="text-base">🎯</span>;
+                color = "text-orange bg-orange/10 border-orange/30";
+                texto = `Penalti: ${ev.jugador_nombre} — ${ev.subtipo || ""}`;
+                break;
         }
+
         return (
-            <div className={`flex items-center gap-3 p-3 border rounded-lg shadow-sm ${color} mb-2`}>
-                <div className="font-mono font-bold text-lg w-8 text-center">{ev.minuto}'</div>
-                <div className="text-xl flex items-center justify-center w-6">{icono}</div>
-                <div className="font-bold flex-1 text-sm">{texto}</div>
-                <button onClick={() => borrarEvento(ev)} className="text-gray-400 hover:text-red-500"><Trash2 size={16} /></button>
+            <div className={`flex items-center gap-3 p-3 border rounded-xl shadow-sm mb-2 ${color} transition-all hover:scale-[1.01]`}>
+                <span className="font-mono font-black text-sm w-10 text-center opacity-60">{ev.minuto}'</span>
+                <span className="text-lg flex items-center justify-center w-6 shrink-0">{icono}</span>
+                <span className="font-bold flex-1 text-sm">{texto}</span>
+                <button onClick={() => borrarEvento(ev)} className="text-silver/30 hover:text-red p-1 rounded transition-colors">
+                    <Trash2 size={14} />
+                </button>
             </div>
         );
     };
 
-    const getJugadoresModal = () => {
-        const listaRaw = formEvento.equipo_id == partido?.local_id.toString() ? plantillaLocal : plantillaVisitante;
-        const hayAlguienConvocado = listaRaw.some(p => p.estado !== 'no_convocado');
-        let listaFiltrada = listaRaw;
-        if (hayAlguienConvocado) listaFiltrada = listaRaw.filter(p => p.estado !== 'no_convocado');
-        if (["GOL", "CAMBIO", "LESION", "PENALTI_FALLADO", "DOBLE_PENALTI_FALLADO"].includes(formEvento.tipo)) {
-            listaFiltrada = listaFiltrada.filter(p => !p.es_entrenador);
+    // --- PDF ---
+    async function handleGenerarPDF() {
+        if (!partido) return;
+        try {
+            const titularesLocal = plantillaLocal.filter(p => p.estado === 'titular');
+            const titularesVisitante = plantillaVisitante.filter(p => p.estado === 'titular');
+            await generarActaPartido(partido, titularesLocal, titularesVisitante, eventos, {});
+        } catch (e) {
+            console.error(e);
+            alert("Error al generar el PDF");
         }
-        return listaFiltrada;
-    };
+    }
 
-    // --- RENDERIZADO ESTADÍSTICAS (MEJORADO) ---
-    const renderStatRow = (label: string, field: keyof StatsEquipo) => {
-        const isAuto = field === 'amarillas' || field === 'rojas';
-
-        // Función unificada para cambio manual
-        const handleManualChange = (esLocal: boolean, valor: string) => {
-            let val = parseInt(valor);
-            if (isNaN(val) || val < 0) val = 0;
-
-            if (field === 'posesion') {
-                val = Math.min(100, val);
-                if (esLocal) { setStatsLocal(p => ({ ...p, posesion: val })); setStatsVisitante(p => ({ ...p, posesion: 100 - val })); }
-                else { setStatsVisitante(p => ({ ...p, posesion: val })); setStatsLocal(p => ({ ...p, posesion: 100 - val })); }
-            } else {
-                if (esLocal) setStatsLocal(p => ({ ...p, [field]: val }));
-                else setStatsVisitante(p => ({ ...p, [field]: val }));
-            }
-        };
+    const renderListaEquipo = (lista: PersonaAlineada[], esLocal: boolean) => {
+        const entrenadores = lista.filter(p => p.es_entrenador);
+        const jugadores = lista.filter(p => !p.es_entrenador);
+        const scorePos = (pos: string) => { if (pos === 'Portero') return 1; if (pos === 'Cierre') return 2; if (pos === 'Ala' || pos === 'Ala Izquierdo' || pos === 'Ala Derecho') return 3; if (pos === 'Pívot' || pos === 'Pivot') return 4; return 5; };
+        const scoreEstado = (s: string) => { if (s === 'titular') return 1; if (s === 'suplente') return 2; if (s === 'convocado') return 3; return 4; };
+        const jugadoresOrdenados = [...jugadores].sort((a, b) => {
+            if (scoreEstado(a.estado) !== scoreEstado(b.estado)) return scoreEstado(a.estado) - scoreEstado(b.estado);
+            return scorePos(a.posicion) - scorePos(b.posicion);
+        });
 
         return (
-            <div className="flex items-center py-3 border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors group">
-                {/* LOCAL */}
-                <div className="flex-1 flex justify-end items-center gap-3 pr-4">
-                    {!isAuto && (
-                        <div className="flex gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleManualChange(true, (statsLocal[field] - 1).toString())} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 hover:bg-red-100 hover:text-red-600 transition-colors"><Minus size={14} /></button>
-                            <button onClick={() => handleManualChange(true, (statsLocal[field] + 1).toString())} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 hover:bg-green-100 hover:text-green-600 transition-colors"><Plus size={14} /></button>
+            <div className="flex-1 overflow-y-auto p-3 pb-24 space-y-3">
+                {entrenadores.length > 0 && (
+                    <div className="bg-white/5 p-3 rounded-xl border border-white/5">
+                        <div className="text-[10px] font-black text-silver/40 uppercase tracking-widest mb-2">Cuerpo Técnico</div>
+                        <div className="space-y-2">
+                            {entrenadores.map(ent => (
+                                <div key={ent.persona_id} className="flex items-center gap-3 p-2 bg-navy/40 border border-white/5 rounded-xl">
+                                    <div className="w-10 h-10 rounded-full overflow-hidden border border-white/10 bg-navy shrink-0"><Avatar path={ent.foto} alt="" /></div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-bold text-white truncate">{ent.nombre}</div>
+                                        <div className="flex items-center gap-1.5 mt-0.5">
+                                            {renderFlags(ent.nacionalidad_id, ent.nacionalidad2_id)}
+                                            <span className="text-[9px] text-silver/50 uppercase font-bold tracking-wider">Entrenador</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-1.5">
+                                        <button onClick={() => cambiarEstado(esLocal, ent.persona_id, 'convocado')} className={`px-2.5 py-1 text-[9px] font-black rounded-lg transition-all ${ent.estado === 'convocado' ? 'bg-orange text-white' : 'bg-white/5 text-silver/40 hover:bg-white/10'}`}>CON</button>
+                                        <button onClick={() => cambiarEstado(esLocal, ent.persona_id, 'no_convocado')} className={`px-2.5 py-1 text-[9px] font-black rounded-lg transition-all ${ent.estado === 'no_convocado' ? 'bg-red/20 text-red' : 'bg-white/5 text-silver/40 hover:bg-white/10'}`}>X</button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                    )}
-                    {isAuto ? (
-                        <span className="font-black text-2xl text-navy w-16 text-center">{statsLocal[field]}</span>
-                    ) : (
-                        <input
-                            type="number"
-                            value={statsLocal[field]}
-                            onChange={e => handleManualChange(true, e.target.value)}
-                            className="w-16 text-center font-black text-2xl text-navy bg-transparent border-b-2 border-transparent focus:border-navy outline-none"
-                        />
-                    )}
-                </div>
-
-                {/* LABEL */}
-                <div className="w-40 text-center text-[10px] font-bold text-gray-400 uppercase tracking-widest px-2">{label}</div>
-
-                {/* VISITANTE */}
-                <div className="flex-1 flex justify-start items-center gap-3 pl-4">
-                    {isAuto ? (
-                        <span className="font-black text-2xl text-navy w-16 text-center">{statsVisitante[field]}</span>
-                    ) : (
-                        <input
-                            type="number"
-                            value={statsVisitante[field]}
-                            onChange={e => handleManualChange(false, e.target.value)}
-                            className="w-16 text-center font-black text-2xl text-navy bg-transparent border-b-2 border-transparent focus:border-navy outline-none"
-                        />
-                    )}
-                    {!isAuto && (
-                        <div className="flex gap-1 opacity-50 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleManualChange(false, (statsVisitante[field] + 1).toString())} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 hover:bg-green-100 hover:text-green-600 transition-colors"><Plus size={14} /></button>
-                            <button onClick={() => handleManualChange(false, (statsVisitante[field] - 1).toString())} className="w-8 h-8 flex items-center justify-center rounded bg-gray-100 hover:bg-red-100 hover:text-red-600 transition-colors"><Minus size={14} /></button>
-                        </div>
-                    )}
+                    </div>
+                )}
+                <div className="space-y-1.5">
+                    {jugadoresOrdenados.map(jug => {
+                        let bg = "bg-white/5 opacity-60 border-white/5";
+                        if (jug.estado === 'titular') bg = "bg-orange/10 border-orange/40 opacity-100 shadow-md";
+                        if (jug.estado === 'suplente') bg = "bg-success/10 border-success/30 opacity-100";
+                        if (jug.estado === 'convocado') bg = "bg-accent-blue/10 border-accent-blue/30 opacity-100";
+                        return (
+                            <div key={jug.persona_id} className={`flex items-center gap-3 p-2.5 rounded-xl border ${bg} transition-all group hover:opacity-100`}>
+                                <div className="w-6 text-center font-mono font-black text-white text-base">{jug.dorsal}</div>
+                                <div className="w-10 h-10 rounded-full overflow-hidden border border-white/10 bg-navy shrink-0 shadow-inner"><Avatar path={jug.foto} alt="" /></div>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <span className="font-bold text-white truncate text-sm">{jug.nombre}</span>
+                                        {jug.es_capitan && <Crown size={12} className="text-orange animate-bounce" />}
+                                    </div>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                        {renderFlags(jug.nacionalidad_id, jug.nacionalidad2_id)}
+                                        <span className="text-[9px] text-silver/50 uppercase font-bold tracking-wider">{jug.posicion}</span>
+                                    </div>
+                                </div>
+                                <div className="flex gap-1">
+                                    <button onClick={() => cambiarEstado(esLocal, jug.persona_id, 'titular')} className={`px-2 py-1 text-[9px] font-black rounded-lg transition-all ${jug.estado === 'titular' ? 'bg-orange text-white' : 'bg-white/5 text-silver/40 hover:bg-white/10 hover:text-white'}`}>TIT</button>
+                                    <button onClick={() => cambiarEstado(esLocal, jug.persona_id, 'suplente')} className={`px-2 py-1 text-[9px] font-black rounded-lg transition-all ${jug.estado === 'suplente' ? 'bg-success text-white' : 'bg-white/5 text-silver/40 hover:bg-white/10 hover:text-white'}`}>SUP</button>
+                                    <button onClick={() => cambiarEstado(esLocal, jug.persona_id, 'convocado')} className={`px-2 py-1 text-[9px] font-black rounded-lg transition-all ${jug.estado === 'convocado' ? 'bg-accent-blue text-white' : 'bg-white/5 text-silver/40 hover:bg-white/10 hover:text-white'}`}>CON</button>
+                                    <button onClick={() => toggleCapitan(esLocal, jug.persona_id)} className={`p-1.5 rounded-lg transition-all ${jug.es_capitan ? 'text-orange bg-orange/10' : 'text-silver/30 hover:text-orange hover:bg-white/5'}`}><Crown size={12} /></button>
+                                    <button onClick={() => cambiarEstado(esLocal, jug.persona_id, 'no_convocado')} className="p-1.5 text-silver/40 hover:text-red hover:bg-red/10 rounded-lg transition-colors">X</button>
+                                </div>
+                            </div>
+                        );
+                    })}
                 </div>
             </div>
         );
     };
 
-    if (!partido) return <div className="flex h-screen items-center justify-center text-gray-400 animate-pulse">Cargando...</div>;
+    const titularesLocal = plantillaLocal.filter(p => p.estado === 'titular' && !p.es_entrenador);
+    const titularesVisitante = plantillaVisitante.filter(p => p.estado === 'titular' && !p.es_entrenador);
+
+    if (!partido) return <div className="flex h-screen items-center justify-center text-silver/40 animate-pulse font-display font-black">CARGANDO ACTA...</div>;
 
     return (
-        <div className="flex flex-col h-screen bg-gray-50 text-navy">
+        <div className="flex flex-col h-screen bg-transparent text-white ml-0">
             {/* CABECERA */}
-            <div className="bg-white border-b border-gray-200 shadow-sm p-4 flex items-center justify-between sticky top-0 z-10">
-                <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-gray-500 hover:text-navy font-bold"><ArrowLeft size={20} /> Volver</button>
-                <div className="flex items-center gap-8">
-                    <div className="text-right w-40 truncate font-black text-lg">{partido.local_nombre}</div>
-                    <div className="w-12 h-12"><Avatar path={partido.local_escudo} alt="" /></div>
-                    <div className="bg-navy text-white px-6 py-2 rounded-lg font-mono text-3xl font-black tracking-widest shadow-lg">{partido.goles_local} - {partido.goles_visitante}</div>
-                    <div className="w-12 h-12"><Avatar path={partido.visitante_escudo} alt="" /></div>
-                    <div className="text-left w-40 truncate font-black text-lg">{partido.visitante_nombre}</div>
+            <div className="glass-panel p-5 border border-white/5 shadow-2xl rounded-b-2xl flex items-center justify-between sticky top-0 z-20 bg-navy-dark/95 backdrop-blur-xl">
+                <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-silver/60 hover:text-orange font-bold transition-colors">
+                    <ArrowLeft size={20} /> Volver
+                </button>
+                
+                <div className="flex items-center gap-6">
+                    <div className="text-right w-44 truncate font-display font-black text-lg text-white">{partido.local_nombre}</div>
+                    <div className="w-12 h-12 bg-white border border-white/10 shadow-md rounded-xl overflow-hidden flex items-center justify-center p-1.5">
+                        <Avatar path={partido.local_escudo} alt="" className="w-full h-full object-contain" />
+                    </div>
+                    <div className="bg-navy border border-white/10 px-8 py-2.5 rounded-2xl font-mono text-3xl font-black tracking-widest text-orange">
+                        {partido.goles_local} - {partido.goles_visitante}
+                    </div>
+                    <div className="w-12 h-12 bg-white border border-white/10 shadow-md rounded-xl overflow-hidden flex items-center justify-center p-1.5">
+                        <Avatar path={partido.visitante_escudo} alt="" className="w-full h-full object-contain" />
+                    </div>
+                    <div className="text-left w-44 truncate font-display font-black text-lg text-white">{partido.visitante_nombre}</div>
                 </div>
-                <div className="text-right"><div className={`text-xs font-bold uppercase px-2 py-1 rounded ${partido.estado === 'en_juego' ? 'bg-green-100 text-green-700 animate-pulse' : 'bg-gray-100 text-gray-500'}`}>{partido.estado.replace('_', ' ')}</div></div>
+
+                <div className="flex items-center gap-2">
+                    <button onClick={handleGenerarPDF} className="bg-navy border border-white/10 hover:border-orange text-white px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all text-xs uppercase tracking-wider" title="Generar acta PDF">
+                        <FileText size={16} className="text-orange" /> PDF
+                    </button>
+                    <div className="text-right flex flex-col items-end">
+                        <div className={`text-[10px] font-black uppercase tracking-wider px-3 py-1 rounded-full border ${partido.estado === 'en_juego' ? 'bg-green-500/10 text-success border-success/30 animate-pulse' : 'bg-white/5 text-silver/60 border-white/5'}`}>
+                            {partido.estado.replace(/_/g, ' ')}
+                        </div>
+                        {partido.arbitro_nombre && (
+                            <div className="text-[9px] text-silver/40 mt-1.5 font-bold flex items-center gap-1">
+                                <Gavel size={12} className="text-orange" />
+                                {[partido.arbitro_nombre, partido.arbitro_2_nombre, partido.arbitro_3_nombre].filter(Boolean).join(", ")}
+                            </div>
+                        )}
+                        {partido.estadio_nombre && (
+                            <div className="text-[9px] text-silver/40 font-bold flex items-center gap-1 mt-0.5">
+                                <MapPin size={12} className="text-accent-blue" />
+                                {partido.estadio_nombre}
+                            </div>
+                        )}
+                    </div>
+                </div>
             </div>
 
-            <div className="flex justify-center bg-white border-b border-gray-200">
-                {["Alineaciones", "Eventos", "Estadísticas"].map(t => (
-                    <button key={t} onClick={() => setTab(t.toLowerCase())} className={`px-8 py-3 font-bold text-sm uppercase border-b-2 ${tab === t.toLowerCase() ? 'border-green-600 text-green-600' : 'border-transparent text-gray-400 hover:text-navy'}`}>{t}</button>
-                ))}
+            {/* BARRA DE TABS */}
+            <div className="flex justify-center bg-transparent my-4">
+                <div className="flex gap-1 glass-panel p-1.5 rounded-xl border border-white/5 w-fit overflow-x-auto">
+                    {TABS.map(t => (
+                        <button
+                            key={t.id}
+                            onClick={() => setTab(t.id)}
+                            className={`px-5 py-2.5 rounded-lg text-xs uppercase tracking-wider font-black transition-all whitespace-nowrap ${tab === t.id ? 'bg-gradient-to-r from-orange to-orange-neon text-white shadow-neon-orange' : 'text-silver/50 hover:bg-white/5 hover:text-white'}`}
+                        >
+                            {t.label}
+                        </button>
+                    ))}
+                </div>
             </div>
 
-            <div className="flex-1 overflow-auto p-6">
+            {/* CONTENIDO PRINCIPAL */}
+            <div className="flex-1 overflow-auto px-8 pb-24">
+                {/* TAB: ALINEACIONES */}
                 {tab === "alineaciones" && (
-                    <div className="grid grid-cols-2 gap-6 h-full">
-                        <div className="bg-white rounded-xl shadow-sm border p-4 flex flex-col"><h3 className="text-center font-bold mb-4">{partido.local_nombre}</h3>{renderListaEquipo(plantillaLocal, true)}</div>
-                        <div className="bg-white rounded-xl shadow-sm border p-4 flex flex-col"><h3 className="text-center font-bold mb-4">{partido.visitante_nombre}</h3>{renderListaEquipo(plantillaVisitante, false)}</div>
+                    <div className="flex flex-col gap-4">
+                        {/* Campo de Futsal con titulares */}
+                        <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden shadow-xl bg-navy-dark/30">
+                            <CampoFutsal
+                                localNombre={partido.local_nombre}
+                                visitanteNombre={partido.visitante_nombre}
+                                localEscudo={partido.local_escudo}
+                                visitanteEscudo={partido.visitante_escudo}
+                                alineacionLocal={titularesLocal}
+                                alineacionVisitante={titularesVisitante}
+                                formacionLocalGuardada={formacionLocal}
+                                formacionVisitanteGuardada={formacionVisitante}
+                                onCambiarFormacion={(eq, f) => {
+                                    if (eq === "local") setFormacionLocal(f);
+                                    else setFormacionVisitante(f);
+                                }}
+                                fechaPartido={partido.fecha}
+                            />
+                        </div>
+
+                        <div className="flex justify-end">
+                            <button
+                                onClick={() => setModalScrapeOpen(true)}
+                                className="bg-navy border border-white/10 hover:border-orange text-white px-6 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-all text-xs uppercase tracking-wider"
+                            >
+                                <Globe size={16} className="text-orange" /> Importar de CeroaCero
+                            </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div className="glass-panel rounded-2xl border border-white/5 flex flex-col overflow-hidden shadow-xl bg-navy-dark/30">
+                                <h3 className="text-center font-display font-black p-4 border-b border-white/5 uppercase text-xs tracking-widest text-silver/80">{partido.local_nombre}</h3>
+                                {renderListaEquipo(plantillaLocal, true)}
+                            </div>
+                            <div className="glass-panel rounded-2xl border border-white/5 flex flex-col overflow-hidden shadow-xl bg-navy-dark/30">
+                                <h3 className="text-center font-display font-black p-4 border-b border-white/5 uppercase text-xs tracking-widest text-silver/80">{partido.visitante_nombre}</h3>
+                                {renderListaEquipo(plantillaVisitante, false)}
+                            </div>
+                        </div>
                     </div>
                 )}
 
+                {/* TAB: EVENTOS */}
                 {tab === "eventos" && (
-                    <div className="max-w-3xl mx-auto pb-20">
-                        <div className="flex justify-end mb-4"><button onClick={abrirModalEvento} className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold shadow-md flex items-center gap-2"><Plus size={20} /> Añadir Evento</button></div>
+                    <div className="max-w-3xl mx-auto">
+                        <div className="flex justify-end gap-3 mb-5">
+                            <button
+                                onClick={() => { setEventoAEditar(null); setDefaultTipoEvento(undefined); setModalEventoOpen(true); }}
+                                className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all text-sm"
+                            >
+                                <Plus size={18} /> Añadir Evento
+                            </button>
+                        </div>
                         <div className="space-y-1">
-                            {eventos.map(ev => (<div key={ev.id} className={`flex ${ev.equipo_id === partido.local_id ? 'justify-start' : 'justify-end'}`}><div className={`w-[85%] md:w-[48%] ${ev.equipo_id === partido.local_id ? '' : 'text-right'}`}>{renderEvento(ev)}</div></div>))}
+                            {eventos.map(ev => (
+                                <div key={ev.id} className={`flex ${ev.equipo_id === partido.local_id ? 'justify-start' : 'justify-end'}`}>
+                                    <div className={`w-[85%] md:w-[60%]`}>{renderEvento(ev)}</div>
+                                </div>
+                            ))}
+                            {eventos.length === 0 && (
+                                <div className="text-center py-16 text-silver/30 font-semibold border border-dashed border-white/5 rounded-2xl">
+                                    No se han registrado eventos en este partido.
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
 
-                {tab === "estadísticas" && (
-                    <div className="max-w-4xl mx-auto pb-20">
-                        <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-                            <div className="bg-gray-50 px-6 py-4 border-b flex justify-between items-center">
-                                <div className="font-black text-navy">{partido.local_nombre}</div>
-                                <div className="text-xs font-bold text-gray-400 uppercase tracking-widest"><Activity size={14} className="inline mr-1" /> Estadísticas del Partido</div>
-                                <div className="font-black text-navy">{partido.visitante_nombre}</div>
-                            </div>
+                {/* TAB: ESTADÍSTICAS DE EQUIPO */}
+                {tab === "estadisticas" && (
+                    <EstadisticasPartido
+                        partidoId={partido.id}
+                        localId={partido.local_id}
+                        visitanteId={partido.visitante_id}
+                        localNombre={partido.local_nombre}
+                        visitanteNombre={partido.visitante_nombre}
+                    />
+                )}
 
-                            <div className="p-4">
-                                {renderStatRow("Posesión (%)", "posesion")}
-                                {renderStatRow("Saques de Esquina", "corners")}
-                                {renderStatRow("Faltas", "faltas")}
+                {/* TAB: ESTADÍSTICAS POR JUGADOR */}
+                {tab === "jugadores" && (
+                    <EstadisticasJugadorPartido
+                        partidoId={partido.id}
+                        localId={partido.local_id}
+                        visitanteId={partido.visitante_id}
+                        localNombre={partido.local_nombre}
+                        visitanteNombre={partido.visitante_nombre}
+                    />
+                )}
 
-                                <div className="my-4 border-t border-gray-100"></div>
-                                <div className="text-center text-[10px] text-gray-400 mb-2 uppercase font-bold">Disciplinario (Automático)</div>
-                                {renderStatRow("Tarjetas Amarillas", "amarillas")}
-                                {renderStatRow("Tarjetas Rojas", "rojas")}
-                            </div>
+                {/* TAB: VALORACIONES */}
+                {tab === "valoraciones" && (
+                    <ValoracionesPartido
+                        partidoId={partido.id}
+                        localId={partido.local_id}
+                        visitanteId={partido.visitante_id}
+                        localNombre={partido.local_nombre}
+                        visitanteNombre={partido.visitante_nombre}
+                    />
+                )}
 
-                            <div className="bg-gray-50 px-6 py-4 border-t text-center">
-                                <button onClick={guardarEstadisticas} className="bg-green-600 hover:bg-green-700 text-white px-8 py-2 rounded-full font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 flex items-center gap-2 mx-auto">
-                                    <Save size={18} /> Guardar Estadísticas
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                {/* TAB: TANDA DE PENALTIS */}
+                {tab === "penaltis" && (
+                    <TandaPenaltisPartido
+                        partido={partido}
+                        localId={partido.local_id}
+                        visitanteId={partido.visitante_id}
+                    />
                 )}
             </div>
 
-            <div className="bg-white border-t p-4 flex justify-end sticky bottom-0 z-10 shadow-lg">
-                {tab !== "estadísticas" && (
-                    <button onClick={guardarAlineaciones} className="bg-green-600 text-white px-6 py-2 rounded-lg font-bold shadow-md flex items-center gap-2 hover:bg-green-700"><Save size={20} /> Guardar Acta</button>
+            {/* BOTÓN INFERIOR FIJO */}
+            <div className="fixed bottom-0 left-0 right-0 glass-panel border-t border-white/5 p-4 flex justify-end bg-navy-dark/90 backdrop-blur-xl z-20">
+                {tab === "alineaciones" && (
+                    <button onClick={guardarAlineaciones} className="bg-gradient-to-r from-orange to-orange-neon text-white px-8 py-3 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all text-sm">
+                        <Save size={18} /> Guardar Acta
+                    </button>
                 )}
             </div>
 
-            <Modal isOpen={modalEventoOpen} onClose={() => setModalEventoOpen(false)} title="Registrar Evento">
-                <div className="space-y-4">
-                    <div className="grid grid-cols-3 gap-4">
-                        <div className="col-span-1"><label className="block text-xs font-bold text-navy mb-1">Minuto</label><input type="number" value={formEvento.minuto} onChange={e => setFormEvento({ ...formEvento, minuto: e.target.value })} className="w-full p-2 border rounded text-center text-xl font-black bg-gray-50" autoFocus /></div>
-                        <div className="col-span-2"><label className="block text-xs font-bold text-navy mb-1">Tipo</label>
-                            <select value={formEvento.tipo} onChange={e => setFormEvento({ ...formEvento, tipo: e.target.value })} className="w-full p-2 border rounded font-bold bg-white text-navy">
-                                <option value="GOL">⚽ Gol</option>
-                                <option value="TARJETA_AMARILLA">🟨 Tarjeta Amarilla</option>
-                                <option value="DOBLE_AMARILLA">🟨🟥 2ª Amarilla</option>
-                                <option value="TARJETA_ROJA">🟥 Tarjeta Roja</option>
-                                <option value="CAMBIO">🔄 Cambio</option>
-                                <option value="LESION">🚑 Lesión</option>
-                                <option value="PENALTI_FALLADO">❌ Penalti Fallado</option>
-                                <option value="DOBLE_PENALTI_FALLADO">❌ Doble Penalti Fallado</option>
-                            </select>
+            {/* MODAL EVENTO (nuevo componente) */}
+            {modalEventoOpen && (
+                <ModalEvento
+                    isOpen={modalEventoOpen}
+                    onClose={() => { setModalEventoOpen(false); setEventoAEditar(null); setDefaultTipoEvento(undefined); }}
+                    onSave={onEventoGuardado}
+                    partido={partido}
+                    localId={partido.local_id}
+                    visitanteId={partido.visitante_id}
+                    eventoAEditar={eventoAEditar}
+                    defaultTipoEvento={defaultTipoEvento}
+                />
+            )}
+
+            {/* MODAL SCRAPE URL */}
+            <Modal isOpen={modalScrapeOpen} onClose={() => setModalScrapeOpen(false)} title="Importar Partido desde CeroaCero">
+                <div className="space-y-4 text-white">
+                    <p className="text-xs text-silver/60">
+                        Introduce la dirección web del partido en ceroacero.es. La aplicación descargará el acta oficial automáticamente.
+                    </p>
+                    <div>
+                        <label className="block text-xs font-black text-silver/45 uppercase tracking-wider mb-2">URL de CeroaCero</label>
+                        <input
+                            type="text"
+                            value={ceroaceroUrl}
+                            onChange={e => setCeroaceroUrl(e.target.value)}
+                            placeholder="https://www.ceroacero.es/partido/..."
+                            className="w-full p-3 bg-navy border border-white/10 rounded-xl outline-none focus:border-orange text-sm font-medium"
+                            disabled={isScraping}
+                        />
+                    </div>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
+                        <button onClick={() => setModalScrapeOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white font-bold text-sm uppercase tracking-wider" disabled={isScraping}>
+                            Cancelar
+                        </button>
+                        <button onClick={handleStartScraping} className="bg-gradient-to-r from-orange to-orange-neon text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2" disabled={isScraping}>
+                            {isScraping ? "Descargando..." : "Siguiente"}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* MODAL MAPEO */}
+            <Modal isOpen={modalMappingOpen} onClose={() => setModalMappingOpen(false)} title="Verificar y Mapear Plantillas">
+                <div className="space-y-6 text-white max-h-[80vh] overflow-y-auto pr-2">
+                    <div className="p-4 bg-orange/10 border border-orange/20 rounded-2xl flex items-start gap-3">
+                        <Globe className="text-orange shrink-0 animate-pulse" size={20} />
+                        <div>
+                            <h4 className="text-sm font-bold text-white uppercase tracking-wider mb-1">Mapeo Inteligente Activo</h4>
+                            <p className="text-xs text-silver/70">Revisa las asignaciones automáticas y ajusta manualmente si es necesario.</p>
                         </div>
                     </div>
-                    {formEvento.tipo === 'GOL' && (
-                        <div><label className="block text-xs font-bold text-navy mb-1">Detalle</label><select value={formEvento.subtipo || "JUGADA"} onChange={e => setFormEvento({ ...formEvento, subtipo: e.target.value })} className="w-full p-2 border rounded bg-blue-50 text-navy font-medium"><option value="JUGADA">Jugada</option><option value="FALTA">Falta</option><option value="PENALTI">Penalti</option><option value="DOBLE_PENALTI">Doble Penalti</option><option value="CABEZA">Cabeza</option><option value="DERECHA">Pie Derecho</option><option value="IZQUIERDA">Pie Izquierdo</option><option value="PROPIA_PUERTA">☠️ Propia Puerta</option></select></div>
-                    )}
-                    <div>
-                        <label className="block text-xs font-bold text-navy mb-1">Equipo</label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <button onClick={() => setFormEvento({ ...formEvento, equipo_id: partido.local_id.toString() })} className={`p-2 rounded border font-bold text-sm ${formEvento.equipo_id == partido.local_id.toString() ? 'bg-navy text-white border-navy' : 'bg-gray-50 text-gray-500'}`}>{partido.local_nombre}</button>
-                            <button onClick={() => setFormEvento({ ...formEvento, equipo_id: partido.visitante_id.toString() })} className={`p-2 rounded border font-bold text-sm ${formEvento.equipo_id == partido.visitante_id.toString() ? 'bg-navy text-white border-navy' : 'bg-gray-50 text-gray-500'}`}>{partido.visitante_nombre}</button>
+                    <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                        <div className="space-y-4">
+                            <h3 className="font-display font-black text-sm uppercase tracking-widest text-orange border-b border-white/5 pb-2">{partido?.local_nombre}</h3>
+                            <div className="space-y-2.5">
+                                {scrapedLocal.map((p, idx) => (
+                                    <div key={idx} className="bg-navy-dark/40 border border-white/5 rounded-xl p-3 flex flex-col gap-2">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="text-xs font-mono font-black text-silver/40">#{p.number}</span>
+                                                <span className="text-sm font-bold text-white truncate">{p.name}</span>
+                                                {p.isStarter && <span className="text-[9px] bg-orange/25 text-orange border border-orange/30 px-1 py-0.2 rounded font-black uppercase">Titular</span>}
+                                                {p.isCoach && <span className="text-[9px] bg-accent-blue/25 text-accent-blue border border-accent-blue/30 px-1 py-0.2 rounded font-black uppercase">DT</span>}
+                                            </div>
+                                        </div>
+                                        <select
+                                            value={mappingsLocal[p.name] || ""}
+                                            onChange={e => setMappingsLocal({ ...mappingsLocal, [p.name]: e.target.value })}
+                                            className={`w-full p-2 text-xs bg-navy border rounded-lg outline-none font-bold cursor-pointer ${mappingsLocal[p.name] ? 'border-success text-success bg-success/5' : 'border-red/40 text-red bg-red/5'}`}
+                                        >
+                                            <option value="">-- No Asociar --</option>
+                                            {plantillaLocal.map(x => (
+                                                <option key={x.persona_id} value={x.persona_id}>
+                                                    {x.es_entrenador ? `(DT) ${x.nombre}` : `#${x.dorsal} - ${x.nombre} (${x.posicion})`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                        <div className="space-y-4">
+                            <h3 className="font-display font-black text-sm uppercase tracking-widest text-accent-blue border-b border-white/5 pb-2">{partido?.visitante_nombre}</h3>
+                            <div className="space-y-2.5">
+                                {scrapedVisitante.map((p, idx) => (
+                                    <div key={idx} className="bg-navy-dark/40 border border-white/5 rounded-xl p-3 flex flex-col gap-2">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <span className="text-xs font-mono font-black text-silver/40">#{p.number}</span>
+                                                <span className="text-sm font-bold text-white truncate">{p.name}</span>
+                                                {p.isStarter && <span className="text-[9px] bg-orange/25 text-orange border border-orange/30 px-1 py-0.2 rounded font-black uppercase">Titular</span>}
+                                                {p.isCoach && <span className="text-[9px] bg-accent-blue/25 text-accent-blue border border-accent-blue/30 px-1 py-0.2 rounded font-black uppercase">DT</span>}
+                                            </div>
+                                        </div>
+                                        <select
+                                            value={mappingsVisitante[p.name] || ""}
+                                            onChange={e => setMappingsVisitante({ ...mappingsVisitante, [p.name]: e.target.value })}
+                                            className={`w-full p-2 text-xs bg-navy border rounded-lg outline-none font-bold cursor-pointer ${mappingsVisitante[p.name] ? 'border-success text-success bg-success/5' : 'border-red/40 text-red bg-red/5'}`}
+                                        >
+                                            <option value="">-- No Asociar --</option>
+                                            {plantillaVisitante.map(x => (
+                                                <option key={x.persona_id} value={x.persona_id}>
+                                                    {x.es_entrenador ? `(DT) ${x.nombre}` : `#${x.dorsal} - ${x.nombre} (${x.posicion})`}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
-                    <div>
-                        <label className="block text-xs font-bold text-navy mb-1">{formEvento.tipo === 'CAMBIO' ? 'Entra' : 'Protagonista'}</label>
-                        <select value={formEvento.jugador_id} onChange={e => setFormEvento({ ...formEvento, jugador_id: e.target.value })} className="w-full p-2 border rounded bg-white text-navy"><option value="">-- Seleccionar --</option>{getJugadoresModal().map(j => (<option key={j.persona_id} value={j.persona_id}>{j.es_entrenador ? `(ENT) ${j.nombre}` : `#${j.dorsal} - ${j.nombre}`}</option>))}</select>
+                    <div className="flex justify-end gap-3 pt-4 border-t border-white/5 sticky bottom-0 bg-navy-dark/95 backdrop-blur p-4 -mx-2 rounded-xl">
+                        <button onClick={() => setModalMappingOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white font-bold text-sm uppercase tracking-wider">Cancelar</button>
+                        <button onClick={handleConfirmImport} className="bg-gradient-to-r from-orange to-orange-neon text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange">Confirmar Importación</button>
                     </div>
-                    {(formEvento.tipo === 'GOL' || formEvento.tipo === 'CAMBIO') && (
-                        <div><label className="block text-xs font-bold text-navy mb-1">{formEvento.tipo === 'CAMBIO' ? 'Sale' : 'Asistente'}</label><select value={formEvento.extra_id} onChange={e => setFormEvento({ ...formEvento, extra_id: e.target.value })} className="w-full p-2 border rounded bg-white text-navy"><option value="">-- Ninguno --</option>{getJugadoresModal().map(j => (<option key={j.persona_id} value={j.persona_id}>#{j.dorsal} - {j.nombre}</option>))}</select></div>
-                    )}
-                    <div className="flex justify-end gap-2 pt-4 border-t"><button onClick={() => setModalEventoOpen(false)} className="px-4 py-2 text-gray-500">Cancelar</button><button onClick={guardarEvento} className="bg-green-600 text-white px-6 py-2 rounded font-bold shadow hover:bg-green-700">Guardar</button></div>
                 </div>
             </Modal>
         </div>
