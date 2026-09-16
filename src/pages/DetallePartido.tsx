@@ -715,7 +715,7 @@ export default function DetallePartido() {
             } catch (e) { console.error("No se pudo tomar snapshot para deshacer:", e); }
 
             await invoke("guardar_acta_transaccion", {
-                partidoId: id,
+                partidoId: Number(id),
                 equipoLocal: partido.local_id,
                 equipoVisitante: partido.visitante_id,
                 formacionLocal: formacionLocal,
@@ -747,7 +747,9 @@ export default function DetallePartido() {
             return true;
         } catch (e) {
             console.error(e);
-            toast.error("Error al guardar las alineaciones");
+            // Mensaje real incluido: "invalid args..." o SQL error sin abrir la consola.
+            const detalle = typeof e === "string" ? e : e instanceof Error ? e.message : JSON.stringify(e);
+            toast.error(`Error al guardar las alineaciones: ${detalle}`);
             return false;
         } finally {
             setIsGuardando(false);
@@ -777,7 +779,7 @@ export default function DetallePartido() {
             });
             const esLocal = (filaEquipoId: number) => filaEquipoId === partido.local_id;
             await invoke("guardar_acta_transaccion", {
-                partidoId: id,
+                partidoId: Number(id),
                 equipoLocal: partido.local_id,
                 equipoVisitante: partido.visitante_id,
                 formacionLocal: snap.formacionLocal,
