@@ -396,15 +396,22 @@ export async function importarEntrenadoresCSV(rutaPredefinida?: string): Promise
         }
       }
 
+      const equipoActual = String(row.equipo_actual ?? "").trim();
+      const meta: Record<string, unknown> = {};
+      if (equipoActual) meta.equipo_actual = equipoActual;
+      const titulos = Number(String(row.titulos ?? "").trim());
+      if (Number.isFinite(titulos) && titulos > 0) meta.titulos = titulos;
+
       await db.execute(`
-        INSERT INTO Persona (nombre, apellidos, nombre_deportivo, fecha_nacimiento, nacionalidad_principal_id, posiciones_secundarias, foto_path, roles)
-        VALUES (?, ?, ?, ?, ?, '', NULL, 'Entrenador')
+        INSERT INTO Persona (nombre, apellidos, nombre_deportivo, fecha_nacimiento, nacionalidad_principal_id, posiciones_secundarias, foto_path, roles, meta)
+        VALUES (?, ?, ?, ?, ?, '', NULL, 'Entrenador', ?)
       `, [
         deportivo,
         derivarApellidos(row.nombre_completo, deportivo),
         deportivo,
         row.fecha_nacimiento || null,
         paisId,
+        Object.keys(meta).length ? JSON.stringify(meta) : null,
       ]);
       clavesExistentes.add(claveEnt);
       importados++;

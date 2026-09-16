@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Plus, Search, Trash2, Edit, Eye, Filter, UserCog, Upload, X, Calendar, AlertTriangle } from "lucide-react";
+import { Plus, Search, Trash2, Edit, Eye, Filter, UserCog, Upload, X, Calendar, AlertTriangle, Trophy } from "lucide-react";
 import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
@@ -28,11 +28,20 @@ interface Entrenador {
     nacionalidades_secundarias: string;
     foto_path: string | null;
     roles: string;
+    /** Datos extra del CSV de origen: { equipo_actual, titulos } */
+    meta: string | null;
+}
+
+interface EquipoBasico {
+    id: number;
+    nombre: string;
+    escudo_path: string | null;
 }
 
 export default function Entrenadores() {
     const [entrenadores, setEntrenadores] = useState<Entrenador[]>([]);
     const [paises, setPaises] = useState<Pais[]>([]);
+    const [equipos, setEquipos] = useState<EquipoBasico[]>([]);
 
     // Filtros. La búsqueda pasa por un debounce de 200ms: recalcula el
     // índice en cada tecla congela la escritura.
@@ -79,6 +88,10 @@ export default function Entrenadores() {
             const db = await Database.load("sqlite:globalfutsal.db");
             const resPaises = await db.select<Pais[]>("SELECT * FROM Pais ORDER BY nombre ASC");
             setPaises(resPaises);
+
+            // Equipos (con escudo) para enriquecer la ficha con el equipo actual
+            const resEq = await db.select<EquipoBasico[]>("SELECT id, nombre, escudo_path FROM Equipo");
+            setEquipos(resEq);
 
             // FILTRAMOS POR ROL 'Entrenador'
             const resEnt = await db.select<Entrenador[]>(`SELECT * FROM Persona WHERE roles LIKE '%Entrenador%' ORDER BY nombre_deportivo ASC`);
@@ -210,6 +223,25 @@ export default function Entrenadores() {
     function getNombrePais(idPais: number | string | null) {
         if (!idPais) return "";
         return paises.find(x => x.id == idPais)?.nombre || "";
+    }
+
+    /** Meta JSON del CSV: { equipo_actual?, titulos? }. */
+    function getMetaEntrenador(e: Entrenador | null): { equipo_actual?: string; titulos?: number } | null {
+        if (!e?.meta) return null;
+        try {
+            const parsed = JSON.parse(e.meta);
+            return parsed && typeof parsed === "object" ? parsed : null;
+        } catch { return null; }
+    }
+
+    const equiposPorNombre = useMemo(
+        () => new Map(equipos.map(q => [normalizeString(q.nombre), q])),
+        [equipos]
+    );
+
+    /** Equipo de la BD cuyo nombre coincide (sin acentos) con el del CSV. */
+    function getEquipoPorNombre(nombre: string): EquipoBasico | null {
+        return equiposPorNombre.get(normalizeString(nombre)) ?? null;
     }
 
     // Entrenadores importados sin nacionalidad (el CSV de origen no traía país):
@@ -473,13 +505,45 @@ export default function Entrenadores() {
                             </div>
                         </div>
 
-                        {/* Historial (Mockup) */}
-                        <div className="p-6 bg-[#0B1F3B]">
-                            <h4 className="text-xs font-bold text-white/50 uppercase mb-4 flex items-center gap-2">Trayectoria</h4>
-                            <div className="bg-white/5 rounded-lg p-4 border border-white/5 text-center text-white/30 text-xs">
-                                Historial de equipos próximamente...
-                            </div>
-                        </div>
+                        {/* Trayectoria: equipo actual desde el CSV de origen (Persona.meta) */}
+                        {(() => {
+                            const meta = getMetaEntrenador(selectedCoach);
+                            const equipo = meta?.equipo_actual ? getEquipoPorNombre(meta.equipo_actual) : null;
+                            return (
+                                <div className="p-6 bg-[#0B1F3B]">
+                                    <h4 className="text-xs font-bold text-white/50 uppercase mb-4 flex items-center gap-2">Trayectoria</h4>
+                                    {meta?.equipo_actual ? (
+                                        <div className="bg-white/5 rounded-lg p-4 border border-white/5 flex items-center gap-4">
+                                            {equipo?.escudo_path ? (
+                                                <ImagenLocal path={equipo.escudo_path} alt={equipo.nombre} className="w-10 h-10 object-contain" />
+                                            ) : (
+                                                <div className="w-10 h-10 rounded-full bg-navy border border-white/10 flex items-center justify-center text-[10px] font-black text-silver/50 shrink-0">
+                                                    {meta.equipo_actual.slice(0, 2).toUpperCase()}
+                                                </div>
+                                            )}
+                                            <div>
+                                                <div className="text-[10px] font-bold uppercase tracking-wider text-white/40">Equipo actual</div>
+                                                <div className="font-bold text-white">
+                                                    {meta.equipo_actual}
+                                                    {equipo && equipo.nombre !== meta.equipo_actual && (
+                                                        <span className="text-white/40 text-xs font-medium"> ({equipo.nombre})</span>
+                                                    )}
+                                                </div>
+                                                {!!meta.titulos && (
+                                                    <div className="text-xs text-orange font-bold mt-0.5 flex items-center gap-1">
+                                                        <Trophy size={12} /> {meta.titulos} título{meta.titulos === 1 ? "" : "s"}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-white/5 rounded-lg p-4 border border-white/5 text-center text-white/30 text-xs">
+                                            Equipo actual no disponible para este entrenador.
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })()}
                     </div>
                 </div>
             )}
