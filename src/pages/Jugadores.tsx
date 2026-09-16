@@ -162,7 +162,7 @@ export default function Jugadores() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             const nac2Json = formData.pais2 ? JSON.stringify([formData.pais2]) : JSON.stringify([]);
-            const rolesJson = JSON.stringify(["Jugador"]);
+            const roles = "Jugador";
 
             if (editingId) {
                 // CORREGIDO: usamos posiciones_secundarias (plural) en la SQL
@@ -179,7 +179,7 @@ export default function Jugadores() {
                 INSERT INTO Persona 
                 (nombre, apellidos, nombre_deportivo, fecha_nacimiento, nacionalidad_principal_id, nacionalidades_secundarias, foto_path, posicion_principal, posiciones_secundarias, roles)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-            `, [formData.nombre, formData.apellidos, formData.apodo, formData.nacimiento, formData.pais1, nac2Json, formData.foto, formData.pos1, formData.pos2, rolesJson]);
+            `, [formData.nombre, formData.apellidos, formData.apodo, formData.nacimiento, formData.pais1, nac2Json, formData.foto, formData.pos1, formData.pos2, roles]);
             }
             setModalFormOpen(false);
             cargarDatos();

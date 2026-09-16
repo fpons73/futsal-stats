@@ -177,11 +177,11 @@ export default function DesignacionArbitros() {
                 WHERE id=$7
             `, [form.nombre, form.apellidos, form.apodo, form.nacimiento, form.pais1, form.foto, editingId]);
             } else {
-                const rolesJson = JSON.stringify(["Arbitro"]);
+                const roles = "Arbitro";
                 await db.execute(`
                 INSERT INTO Persona (nombre, apellidos, nombre_deportivo, fecha_nacimiento, nacionalidad_principal_id, foto_path, roles)
                 VALUES ($1, $2, $3, $4, $5, $6, $7)
-            `, [form.nombre, form.apellidos, form.apodo, form.nacimiento, form.pais1, form.foto, rolesJson]);
+            `, [form.nombre, form.apellidos, form.apodo, form.nacimiento, form.pais1, form.foto, roles]);
             }
             setIsModalOpen(false);
             if (selEdicion) cargarListas(selEdicion);

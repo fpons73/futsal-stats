@@ -145,7 +145,7 @@ export default function Arbitros() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             const nac2Json = formData.pais2 ? JSON.stringify([formData.pais2]) : JSON.stringify([]);
-            const rolesJson = JSON.stringify(["Arbitro"]);
+            const roles = "Arbitro";
 
             if (editingId) {
                 await db.execute(`
@@ -160,7 +160,7 @@ export default function Arbitros() {
                 INSERT INTO Persona 
                 (nombre, apellidos, nombre_deportivo, fecha_nacimiento, nacionalidad_principal_id, nacionalidades_secundarias, foto_path, roles, posicion_principal, posiciones_secundarias)
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, NULL)
-            `, [formData.nombre, formData.apellidos, formData.apodo, formData.nacimiento, formData.pais1, nac2Json, formData.foto, rolesJson]);
+            `, [formData.nombre, formData.apellidos, formData.apodo, formData.nacimiento, formData.pais1, nac2Json, formData.foto, roles]);
             }
             setModalFormOpen(false);
             cargarDatos();

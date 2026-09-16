@@ -478,7 +478,7 @@ export default function Partidos() {
                 }
 
                 // B. Si no está en la plantilla, buscar en toda la base de datos de Persona (global)
-                const rolStr = esEntrenador ? 'entrenador' : 'jugador';
+                const rolStr = esEntrenador ? 'Entrenador' : 'Jugador';
                 const personasGlobalDb = await db.select<any[]>(`
                     SELECT id, nombre, nombre_deportivo FROM Persona WHERE roles LIKE $1
                 `, [`%${rolStr}%`]);
@@ -1380,7 +1380,8 @@ export default function Partidos() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             const resP = await db.execute(
-                "INSERT INTO Persona (nombre, apellidos, nombre_deportivo, cargo) VALUES ($1, $2, $3, 'arbitro')",
+                // 'cargo' no existe en Persona (esquema de migraciones 1-13): el rol va en 'roles', plano.
+                "INSERT INTO Persona (nombre, apellidos, nombre_deportivo, roles) VALUES ($1, $2, $3, 'Arbitro')",
                 [refereeForm.nombre, refereeForm.apellidos, refereeForm.nombre_deportivo]
             );
             const personaId = resP.lastInsertId;

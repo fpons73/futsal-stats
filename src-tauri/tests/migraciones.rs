@@ -266,3 +266,62 @@ async fn las_versiones_de_migracion_son_consecutivas_desde_uno() {
         );
     }
 }
+
+/// La migración 13 normaliza los formatos legacy de Persona.roles (arrays JSON
+/// y variantes de caso) al texto plano canónico Jugador/Entrenador/Arbitro.
+/// Ejecuta su SQL exacto sobre una BD ya migrada, pre-poblada con todos los
+/// formatos vistos en producción, y comprueba que solo quedan canónicos.
+#[tokio::test]
+async fn la_migracion_normaliza_los_roles_legacy_de_persona() {
+    let pool = bd_virgen_con_migraciones("roles").await;
+
+    // Formatos exactos encontrados en producción antes de la 13.
+    for rol in [
+        r#"["Jugador"]"#,
+        r#"["Arbitro"]"#,
+        r#"["Entrenador"]"#,
+        r#"["Jugador","Entrenador"]"#,
+        "jugador",
+        "entrenador",
+        "arbitro",
+        " Jugador ",
+        "Árbitro",
+    ] {
+        sqlx::query(
+            "INSERT INTO Persona (nombre, apellidos, nombre_deportivo, roles) VALUES ('X', 'Y', 'X', ?1)",
+        )
+        .bind(rol)
+        .execute(&pool)
+        .await
+        .expect("insertar persona con rol legacy");
+    }
+    // La columna es NOT NULL: todas las filas traen algún rol.
+
+    // Re-ejecuta el SQL EXACTO de la migración 13 (es idempotente).
+    let sql_m13 = migraciones()
+        .into_iter()
+        .find(|m| m.version == 13)
+        .expect("existe la migración 13")
+        .sql
+        .to_string();
+    sqlx::raw_sql(&sql_m13)
+        .execute(&pool)
+        .await
+        .expect("re-ejecutar la migración 13");
+
+    let roles: Vec<(Option<String>, i64)> =
+        sqlx::query_as("SELECT roles, COUNT(*) FROM Persona GROUP BY roles ORDER BY roles")
+            .fetch_all(&pool)
+            .await
+            .expect("leer roles normalizados");
+
+    // SQLite ordena A < E < J. Total 9 filas insertadas, 9 normalizadas.
+    let esperados: Vec<(Option<String>, i64)> = vec![
+        (Some("Arbitro".into()), 3),    // ["Arbitro"], arbitro, Árbitro
+        (Some("Entrenador".into()), 3), // ["Entrenador"], entrenador, ["Jugador","Entrenador"]
+        (Some("Jugador".into()), 3),    // ["Jugador"], jugador, " Jugador "
+    ];
+    assert_eq!(roles, esperados, "solo deben quedar roles canónicos (y NULL)");
+
+    pool.close().await;
+}

@@ -321,9 +321,9 @@ export default function Plantillas() {
                     personaForm.pais_id, nac2Json, personaForm.foto, personaForm.pos1, personaForm.pos2, editPersonaId]
                 );
             } else {
-                // INSERT (NUEVO)
+                // INSERT (NUEVO) — roles en formato plano canónico (migración 13)
                 // Determinamos el rol según la pestaña activa
-                const rol = tab === "Jugador" ? JSON.stringify(["Jugador"]) : JSON.stringify(["Entrenador"]);
+                const rol = tab === "Jugador" ? "Jugador" : "Entrenador";
 
                 await db.execute(
                     `INSERT INTO Persona 

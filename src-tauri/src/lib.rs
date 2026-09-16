@@ -182,6 +182,12 @@ pub fn migraciones() -> Vec<Migration> {
             sql: include_str!("../migrations/12_posicion_inicial.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 13,
+            description: "normalizar_roles_persona",
+            sql: include_str!("../migrations/13_normalizar_roles.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
