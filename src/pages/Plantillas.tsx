@@ -181,7 +181,10 @@ export default function Plantillas() {
                 [selEdicion, selEquipo, p.id, tab]
             );
             cargarListas();
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            toast.error("No se pudo añadir a la plantilla");
+        }
     }
 
     async function guardarAltaConDorsal(): Promise<boolean> {
@@ -227,7 +230,10 @@ export default function Plantillas() {
             const db = await Database.load("sqlite:globalfutsal.db");
             await db.execute("DELETE FROM Plantilla WHERE id = $1", [plantillaId]);
             cargarListas();
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            toast.error("No se pudo dar de baja de la plantilla");
+        }
     }
 
     // --- ACCIONES CREAR / EDITAR PERSONA (IN-SITU) ---
@@ -285,7 +291,10 @@ export default function Plantillas() {
                 filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif'] }]
             });
             if (file) setPersonaForm({ ...personaForm, foto: file as string });
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo abrir el selector de archivos");
+        }
     }
 
     async function guardarPersonaDB(): Promise<boolean> {

@@ -111,7 +111,10 @@ export default function DesignacionArbitros() {
             const db = await Database.load("sqlite:globalfutsal.db");
             await db.execute("INSERT INTO Designacion (edicion_id, persona_id) VALUES ($1, $2)", [selEdicion, arbitro.id]);
             cargarListas(selEdicion);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo asignar el árbitro");
+        }
     }
 
     async function desasignar(arbitroId: number) {
@@ -120,7 +123,10 @@ export default function DesignacionArbitros() {
             const db = await Database.load("sqlite:globalfutsal.db");
             await db.execute("DELETE FROM Designacion WHERE edicion_id = $1 AND persona_id = $2", [selEdicion, arbitroId]);
             cargarListas(selEdicion);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo desasignar el árbitro");
+        }
     }
 
     // --- ACCIONES CRUD ARBITRO ---
@@ -154,7 +160,10 @@ export default function DesignacionArbitros() {
                 filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif'] }]
             });
             if (file) setForm({ ...form, foto: file as string });
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo abrir el selector de archivos");
+        }
     }
 
     async function guardarArbitro(): Promise<boolean> {

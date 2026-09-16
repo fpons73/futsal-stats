@@ -101,6 +101,7 @@ export default function Importar() {
       const conFechas = asignarFechas(conPabellones, new Date().toISOString().split("T")[0]);
 
       let importados = 0;
+      let fallos = 0;
       for (const p of conFechas) {
         try {
           await db.execute(`
@@ -110,9 +111,13 @@ export default function Importar() {
           importados++;
         } catch (e) {
           console.error("Error insertando partido:", e);
+          fallos++;
         }
       }
       setResultado(`Calendario generado: ${importados} partidos`);
+      if (fallos > 0) {
+        toast.warning(`${fallos} partidos no se pudieron insertar (revisa la consola)`);
+      }
       toast.success(`Calendario generado: ${importados} partidos`);
       refrescar();
     } catch (e) {

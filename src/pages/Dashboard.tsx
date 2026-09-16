@@ -97,6 +97,7 @@ function BorradoresPendientes() {
             setBorradores(enriquecidos);
         } catch (error) {
             console.error("Error resolviendo partidos de borradores:", error);
+            toast.warning("No se pudieron resolver los equipos de los borradores");
             setBorradores(pendientes.map(b => ({ ...b, local: null, visitante: null, fecha: null })));
         }
     }, []);
@@ -243,6 +244,7 @@ export default function Dashboard() {
 
         } catch (error) {
             console.error("Error cargando dashboard:", error);
+            toast.error("Error al cargar el dashboard");
         }
     }
 

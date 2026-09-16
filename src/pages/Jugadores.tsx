@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -36,10 +36,20 @@ export default function Jugadores() {
     const [jugadores, setJugadores] = useState<Jugador[]>([]);
     const [paises, setPaises] = useState<Pais[]>([]);
 
-    // Filtros
+    // Filtros. Búsqueda debounced (200 ms): con ~20k jugadores, reevaluar el
+    // índice en cada tecla congela la escritura.
+    const [busquedaInput, setBusquedaInput] = useState("");
     const [busqueda, setBusqueda] = useState("");
+    useEffect(() => {
+        const t = setTimeout(() => setBusqueda(busquedaInput), 200);
+        return () => clearTimeout(t);
+    }, [busquedaInput]);
     const [filtroPais, setFiltroPais] = useState("todos");
     const [filtroPos, setFiltroPos] = useState("todas");
+
+    // Paginación de render: 20k filas con imágenes congelarían la pestaña.
+    const POR_PAGINA = 100;
+    const [pagina, setPagina] = useState(1);
 
     // Modales
     const [modalFormOpen, setModalFormOpen] = useState(false);
@@ -75,7 +85,10 @@ export default function Jugadores() {
 
             const resJug = await db.select<Jugador[]>(`SELECT * FROM Persona WHERE roles LIKE '%Jugador%' ORDER BY nombre_deportivo ASC`);
             setJugadores(resJug);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al cargar los jugadores");
+        }
     }
 
     async function seleccionarFoto() {
@@ -85,7 +98,10 @@ export default function Jugadores() {
                 filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif'] }]
             });
             if (file) setFormData({ ...formData, foto: file as string });
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo abrir el selector de archivos");
+        }
     }
 
     function abrirCrear() {
@@ -190,6 +206,8 @@ export default function Jugadores() {
             setJugadorABorrar(null);
         } catch (error) {
             console.error("Error al borrar jugador:", error);
+            toast.error("No se pudo eliminar el jugador. Puede tener actas asociadas.");
+            toast.error("No se pudo eliminar el jugador. Puede tener actas asociadas.");
         }
     }
 
@@ -232,14 +250,32 @@ export default function Jugadores() {
         }
     };
 
-    const jugadoresFiltrados = jugadores.filter(j => {
+    // Índice de texto normalizado por jugador: una sola vez por carga de datos.
+    const indiceBusqueda = useMemo(() => {
+        const mapa = new Map<number, string>();
+        for (const j of jugadores) mapa.set(j.id, normalizeString(j.nombre_deportivo + " " + j.nombre + " " + j.apellidos));
+        return mapa;
+    }, [jugadores]);
+
+    const jugadoresFiltrados = useMemo(() => {
         const busquedaNorm = normalizeString(busqueda);
-        const textoNorm = normalizeString(j.nombre_deportivo + j.nombre + j.apellidos);
-        const matchTexto = textoNorm.includes(busquedaNorm);
-        const matchPais = filtroPais === "todos" || j.nacionalidad_principal_id?.toString() === filtroPais;
-        const matchPos = filtroPos === "todas" || j.posicion_principal === filtroPos;
-        return matchTexto && matchPais && matchPos;
-    });
+        return jugadores.filter(j => {
+            if (busquedaNorm && !(indiceBusqueda.get(j.id)?.includes(busquedaNorm))) return false;
+            if (filtroPais !== "todos" && j.nacionalidad_principal_id?.toString() !== filtroPais) return false;
+            if (filtroPos !== "todas" && j.posicion_principal !== filtroPos) return false;
+            return true;
+        });
+    }, [jugadores, indiceBusqueda, busqueda, filtroPais, filtroPos]);
+
+    const totalPaginas = Math.max(1, Math.ceil(jugadoresFiltrados.length / POR_PAGINA));
+    const paginaActual = Math.min(pagina, totalPaginas);
+    const jugadoresVisibles = useMemo(
+        () => jugadoresFiltrados.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA),
+        [jugadoresFiltrados, paginaActual]
+    );
+    useEffect(() => {
+        setPagina(1);
+    }, [busqueda, filtroPais, filtroPos]);
 
     return (
         <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
@@ -250,7 +286,7 @@ export default function Jugadores() {
                     <h1 className="text-2xl font-display font-black text-white flex items-center gap-3">
                         <User className="text-orange text-glow-orange animate-pulse" /> Jugadores
                     </h1>
-                    <p className="text-silver/50 text-sm mt-1">{jugadores.length} jugadores registrados en el sistema</p>
+                    <p className="text-silver/50 text-sm mt-1">{jugadores.length.toLocaleString("es-ES")} jugadores registrados en el sistema</p>
                 </div>
                 <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     <Plus size={20} /> <span>Nuevo</span>
@@ -261,7 +297,7 @@ export default function Jugadores() {
             <div className="glass-panel p-4 rounded-xl border border-white/5 mb-6 flex flex-wrap items-center gap-4">
                 <div className="flex-1 min-w-[200px] flex items-center gap-3 bg-navy-light/60 px-3 py-2 rounded-xl border border-white/5">
                     <Search className="text-silver/40" size={18} />
-                    <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar por nombre..." className="bg-transparent outline-none w-full text-white placeholder-silver/40 text-sm" />
+                    <input value={busquedaInput} onChange={e => setBusquedaInput(e.target.value)} placeholder="Buscar por nombre..." className="bg-transparent outline-none w-full text-white placeholder-silver/40 text-sm" />
                 </div>
                 <div className="flex items-center gap-2">
                     <Filter size={18} className="text-silver/40" />
@@ -290,7 +326,7 @@ export default function Jugadores() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-silver/80">
-                        {jugadoresFiltrados.map((j) => {
+                        {jugadoresVisibles.map((j) => {
                             let nac2Id = null;
                             try { nac2Id = JSON.parse(j.nacionalidades_secundarias)[0]; } catch { }
 
@@ -338,6 +374,34 @@ export default function Jugadores() {
                     </tbody>
                 </table>
                 {jugadoresFiltrados.length === 0 && <div className="p-10 text-center text-silver/40 font-medium">No se encontraron jugadores.</div>}
+
+                {/* PAGINACIÓN */}
+                {jugadoresFiltrados.length > POR_PAGINA && (
+                    <div className="flex items-center justify-between p-4 border-t border-white/5 text-sm">
+                        <span className="text-silver/50 font-medium">
+                            Mostrando {(paginaActual - 1) * POR_PAGINA + 1}–{Math.min(paginaActual * POR_PAGINA, jugadoresFiltrados.length).toLocaleString("es-ES")} de {jugadoresFiltrados.length.toLocaleString("es-ES")} jugadores
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setPagina(p => Math.max(1, p - 1))}
+                                disabled={paginaActual <= 1}
+                                className="px-4 py-1.5 rounded-lg bg-navy border border-white/5 font-bold text-silver/80 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            >
+                                ← Anterior
+                            </button>
+                            <span className="font-display font-black text-orange text-glow-orange px-2">
+                                {paginaActual} / {totalPaginas}
+                            </span>
+                            <button
+                                onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+                                disabled={paginaActual >= totalPaginas}
+                                className="px-4 py-1.5 rounded-lg bg-navy border border-white/5 font-bold text-silver/80 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Siguiente →
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             <Modal isOpen={modalFormOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Jugador" : "Nuevo Jugador"}>

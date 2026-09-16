@@ -50,7 +50,10 @@ export default function Paises() {
             const resC = await db.select<Confederacion[]>("SELECT id, codigo FROM Confederacion");
             setPaises(resP);
             setConfederaciones(resC);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("Error al cargar los países");
+        }
     }
 
     // --- LÓGICA DE IMPORTACIÓN MASIVA (LA MAGIA) ---
@@ -129,7 +132,10 @@ export default function Paises() {
                 filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
             });
             if (file) setForm({ ...form, bandera: file as string });
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo abrir el selector de archivos");
+        }
     }
 
     async function guardarManual(): Promise<boolean> {

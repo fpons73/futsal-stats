@@ -3,7 +3,7 @@
 const port = process.env.CDP_PORT || "9333";
 
 const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-const page = targets.find((t) => t.type === "page" && t.url.includes("localhost:1420"));
+const page = targets.find((t) => t.type === "page" && t.url.includes("localhost:1430"));
 if (!page) {
   console.error("No app page target found. Targets:", targets.map((t) => `${t.type} ${t.url}`));
   process.exit(1);
@@ -60,14 +60,15 @@ export function cerrar() {
   ws.close();
 }
 
-setTimeout(() => {
-  console.error("TIMEOUT waiting for CDP");
-  process.exit(1);
-}, 60000);
-
 // Modo CLI: node scripts/cdp-eval.mjs "<expresión>"
+// (el fail-safe de 60s solo aplica al modo CLI: en sesiones importadas de larga
+// duración mataría el proceso a mitad de flujo)
 const invocadoDirectamente = process.argv[1] && process.argv[1].replace(/\\/g, "/").endsWith("cdp-eval.mjs");
 if (invocadoDirectamente) {
+  setTimeout(() => {
+    console.error("TIMEOUT waiting for CDP");
+    process.exit(1);
+  }, 60000);
   conectar()
     .then(() => evaluar(process.argv[2]))
     .then((v) => console.log(JSON.stringify(v, null, 2)))

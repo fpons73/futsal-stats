@@ -72,7 +72,10 @@ export default function Arbitros() {
 
             const resArb = await db.select<Arbitro[]>(`SELECT * FROM Persona WHERE roles LIKE '%Arbitro%' ORDER BY nombre_deportivo ASC`);
             setArbitros(resArb);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al cargar los árbitros");
+        }
     }
 
     async function seleccionarFoto() {
@@ -82,7 +85,10 @@ export default function Arbitros() {
                 filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif'] }]
             });
             if (file) setFormData({ ...formData, foto: file as string });
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo abrir el selector de archivos");
+        }
     }
 
     function abrirCrear() {

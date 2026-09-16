@@ -71,7 +71,10 @@ export default function Ediciones() {
 
             const resTemp = await db.select<SelectorData[]>("SELECT id, nombre FROM Temporada ORDER BY fecha_inicio DESC");
             setTemporadas(resTemp);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al cargar las ediciones");
+        }
     }
 
     function abrirCrear() {

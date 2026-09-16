@@ -116,7 +116,10 @@ export default function InscripcionEquipos() {
             const db = await Database.load("sqlite:globalfutsal.db");
             await db.execute("INSERT INTO Inscripcion (edicion_id, equipo_id) VALUES ($1, $2)", [selEdicion, equipo.id]);
             cargarListas(selEdicion);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo inscribir el equipo");
+        }
     }
 
     async function desinscribir(equipoId: number) {
@@ -125,7 +128,10 @@ export default function InscripcionEquipos() {
             const db = await Database.load("sqlite:globalfutsal.db");
             await db.execute("DELETE FROM Inscripcion WHERE edicion_id = $1 AND equipo_id = $2", [selEdicion, equipoId]);
             cargarListas(selEdicion);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo desinscribir el equipo");
+        }
     }
 
     async function actualizarGrupo(equipoId: number, grupo: string) {
@@ -136,7 +142,10 @@ export default function InscripcionEquipos() {
 
             // Actualización optimista en el estado
             setInscritos(prev => prev.map(eq => eq.id === equipoId ? { ...eq, grupo } : eq));
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo actualizar el grupo");
+        }
     }
 
     // --- ACCIONES CRUD EQUIPO ---
@@ -171,7 +180,10 @@ export default function InscripcionEquipos() {
                 filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'webp'] }]
             });
             if (file) setForm({ ...form, escudo: file as string });
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo abrir el selector de archivos");
+        }
     }
 
     async function guardarEquipo(): Promise<boolean> {

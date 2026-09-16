@@ -242,7 +242,10 @@ export default function CentroDatos() {
             try {
                 const res = await db.select<StatRow[]>(query);
                 setStatsData(res);
-            } catch (e) { console.error(e); }
+            } catch (e) {
+                console.error(e);
+                toast.error("Error al calcular la estadística");
+            }
             return;
         }
 
@@ -271,7 +274,10 @@ export default function CentroDatos() {
         try {
             const res = await db.select<StatRow[]>(query);
             setStatsData(res);
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            toast.error("Error al calcular la estadística");
+        }
     }
 
     // --- 3. STATS EQUIPOS ---

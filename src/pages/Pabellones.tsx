@@ -74,7 +74,10 @@ export default function Pabellones() {
             const resPaises = await db.select<Pais[]>("SELECT id, nombre FROM Pais ORDER BY nombre ASC");
             setPaises(resPaises);
 
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al cargar los pabellones");
+        }
     }
 
     async function seleccionarFoto() {
@@ -84,7 +87,10 @@ export default function Pabellones() {
                 filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif'] }]
             });
             if (file) setFotoPath(file as string);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo abrir el selector de archivos");
+        }
     }
 
     function abrirCrear() {

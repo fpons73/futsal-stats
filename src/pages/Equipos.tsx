@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Plus, Search, Trash2, Edit, Upload, Shield, Filter, X } from "lucide-react";
+import { Plus, Search, Trash2, Edit, Upload, Shield, Filter, X, AlertTriangle } from "lucide-react";
 import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
@@ -36,10 +36,21 @@ export default function Equipos() {
     const [equipos, setEquipos] = useState<Equipo[]>([]);
     const [paises, setPaises] = useState<Pais[]>([]);
 
-    // Filtros
+    // Filtros. La búsqueda va debounced (200 ms): el índice de ~18k equipos solo
+    // se reevalúa cuando el usuario deja de teclear, no en cada pulsación.
+    const [busquedaInput, setBusquedaInput] = useState("");
     const [busqueda, setBusqueda] = useState("");
+    useEffect(() => {
+        const t = setTimeout(() => setBusqueda(busquedaInput), 200);
+        return () => clearTimeout(t);
+    }, [busquedaInput]);
     const [filtroPais, setFiltroPais] = useState("todos");
     const [filtroCat, setFiltroCat] = useState("todos");
+
+    // Paginación de render: con 18k equipos, montar todas las filas (cada una con
+    // imágenes) congela la pestaña. Se pintan POR_PAGINA filas y se pagina.
+    const POR_PAGINA = 100;
+    const [pagina, setPagina] = useState(1);
 
     // Modal
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -92,7 +103,10 @@ export default function Equipos() {
             const resPaises = await db.select<Pais[]>("SELECT id, nombre FROM Pais ORDER BY nombre ASC");
             setPaises(resPaises);
 
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al cargar los equipos");
+        }
     }
 
     // --- CRUD ---
@@ -103,7 +117,10 @@ export default function Equipos() {
                 filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif'] }]
             });
             if (file) setEscudoPath(file as string);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo abrir el selector de archivos");
+        }
     }
 
     function abrirCrear() {
@@ -160,14 +177,49 @@ export default function Equipos() {
     }
 
     // --- LÓGICA DE FILTRADO ---
-    const equiposFiltrados = equipos.filter(e => {
+    // País "Desconocido": equipos importados sin país en el CSV de origen.
+    // Tienen filtro propio para poder repararlos manualmente desde aquí.
+    const idDesconocido = useMemo(
+        () => paises.find(p => normalizeString(p.nombre) === "desconocido")?.id ?? null,
+        [paises]
+    );
+    const totalDesconocidos = useMemo(
+        () => (idDesconocido ? equipos.filter(e => e.pais_id === idDesconocido).length : 0),
+        [equipos, idDesconocido]
+    );
+
+    // Índice de texto normalizado por equipo: se calcula UNA vez por carga de datos
+    // (no en cada tecla), así la búsqueda con acentos ignorados es O(1) por fila.
+    const indiceBusqueda = useMemo(() => {
+        const mapa = new Map<number, string>();
+        for (const e of equipos) mapa.set(e.id, normalizeString(e.nombre + " " + e.abreviatura));
+        return mapa;
+    }, [equipos]);
+
+    const equiposFiltrados = useMemo(() => {
         const busquedaNorm = normalizeString(busqueda);
-        const textoNorm = normalizeString(e.nombre + e.abreviatura);
-        const coincideTexto = textoNorm.includes(busquedaNorm);
-        const coincidePais = filtroPais === "todos" || e.pais_id?.toString() === filtroPais;
-        const coincideCat = filtroCat === "todos" || e.categoria === filtroCat;
-        return coincideTexto && coincidePais && coincideCat;
-    });
+        return equipos.filter(e => {
+            if (busquedaNorm && !(indiceBusqueda.get(e.id)?.includes(busquedaNorm))) return false;
+            if (filtroPais === "desconocido") {
+                if (e.pais_id !== idDesconocido) return false;
+            } else if (filtroPais !== "todos" && e.pais_id?.toString() !== filtroPais) {
+                return false;
+            }
+            if (filtroCat !== "todos" && e.categoria !== filtroCat) return false;
+            return true;
+        });
+    }, [equipos, indiceBusqueda, busqueda, filtroPais, filtroCat, idDesconocido]);
+
+    // Ventana visible + reset a la primera página cuando cambian los filtros.
+    const totalPaginas = Math.max(1, Math.ceil(equiposFiltrados.length / POR_PAGINA));
+    const paginaActual = Math.min(pagina, totalPaginas);
+    const equiposVisibles = useMemo(
+        () => equiposFiltrados.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA),
+        [equiposFiltrados, paginaActual]
+    );
+    useEffect(() => {
+        setPagina(1);
+    }, [busqueda, filtroPais, filtroCat]);
 
     return (
         <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
@@ -178,7 +230,17 @@ export default function Equipos() {
                     <h1 className="text-2xl font-display font-black text-white flex items-center gap-3">
                         <Shield className="text-orange text-glow-orange animate-pulse" /> Equipos
                     </h1>
-                    <p className="text-silver/50 text-sm mt-1">{equipos.length} equipos registrados en el sistema</p>
+                    <p className="text-silver/50 text-sm mt-1">{equipos.length.toLocaleString("es-ES")} equipos registrados en el sistema</p>
+                    {totalDesconocidos > 0 && (
+                        <button
+                            onClick={() => setFiltroPais("desconocido")}
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20 transition-colors"
+                            title="Equipos importados sin país en el CSV de origen. Clic para filtrarlos."
+                        >
+                            <AlertTriangle size={12} />
+                            {totalDesconocidos.toLocaleString("es-ES")} sin país — revisar
+                        </button>
+                    )}
                 </div>
                 <div className="flex gap-2">
                     <button className="bg-navy-light hover:bg-navy-light/80 text-white px-4 py-2.5 rounded-xl font-bold shadow-md border border-white/5 flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
@@ -195,8 +257,8 @@ export default function Equipos() {
                 <div className="flex-1 min-w-[200px] flex items-center gap-3 bg-navy-light/60 px-3 py-2 rounded-xl border border-white/5">
                     <Search className="text-silver/40" size={18} />
                     <input
-                        value={busqueda}
-                        onChange={e => setBusqueda(e.target.value)}
+                        value={busquedaInput}
+                        onChange={e => setBusquedaInput(e.target.value)}
                         placeholder="Buscar equipo..."
                         className="bg-transparent outline-none w-full text-white placeholder-silver/40 text-sm"
                     />
@@ -210,7 +272,12 @@ export default function Equipos() {
                         className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold"
                     >
                         <option value="todos">Todos los Países</option>
-                        {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                        {idDesconocido !== null && (
+                            <option value="desconocido">
+                                ⚠ Sin país (Desconocido){totalDesconocidos > 0 ? ` — ${totalDesconocidos.toLocaleString("es-ES")}` : ""}
+                            </option>
+                        )}
+                        {paises.filter(p => p.id !== idDesconocido).map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </select>
 
                     <select
@@ -224,6 +291,23 @@ export default function Equipos() {
                     </select>
                 </div>
             </div>
+
+            {/* AVISO: filtro de sin país activo */}
+            {filtroPais === "desconocido" && (
+                <div className="glass-panel p-4 rounded-xl border border-warning/30 mb-6 flex items-center gap-3 bg-warning/5">
+                    <AlertTriangle size={20} className="text-warning shrink-0" />
+                    <p className="text-sm text-silver/80">
+                        Mostrando los <strong className="text-warning">{totalDesconocidos.toLocaleString("es-ES")} equipos sin país conocido</strong>: el CSV de origen no tenía país para ellos.
+                        Edita cada equipo y asigna su país real cuando lo conozcas.
+                    </p>
+                    <button
+                        onClick={() => setFiltroPais("todos")}
+                        className="ml-auto shrink-0 text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-lg bg-navy border border-white/10 text-silver/70 hover:text-white transition-colors"
+                    >
+                        Quitar filtro
+                    </button>
+                </div>
+            )}
 
             {/* TABLA */}
             <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
@@ -240,7 +324,7 @@ export default function Equipos() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-silver/80">
-                        {equiposFiltrados.map((equipo) => (
+                        {equiposVisibles.map((equipo) => (
                             <tr key={equipo.id} className="hover:bg-white/5 transition-colors group duration-200">
                                 <td className="p-3 text-center">
                                     <div className="w-10 h-10 mx-auto flex items-center justify-center bg-white p-1 rounded-xl shadow-sm border border-white/10">
@@ -254,7 +338,15 @@ export default function Equipos() {
                                 <td className="p-4 font-bold text-white group-hover:text-orange transition-colors">{equipo.nombre}</td>
                                 <td className="p-4 text-center font-display font-black text-orange text-glow-orange text-xs uppercase tracking-wider">{equipo.abreviatura}</td>
                                 <td className="p-4 text-center">
-                                    {equipo.pais_bandera ? (
+                                    {equipo.pais_id === idDesconocido ? (
+                                        <span
+                                            className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-warning"
+                                            title="Sin país conocido: edítalo y asigna el país real"
+                                        >
+                                            <AlertTriangle size={13} />
+                                            Sin país
+                                        </span>
+                                    ) : equipo.pais_bandera ? (
                                         <img src={convertFileSrc(equipo.pais_bandera)} title={equipo.pais_nombre} className="w-6 h-4 object-cover border border-white/10 rounded-sm mx-auto shadow-sm" />
                                     ) : (
                                         <span className="text-xs text-silver/30">-</span>
@@ -281,6 +373,34 @@ export default function Equipos() {
                     </tbody>
                 </table>
                 {equiposFiltrados.length === 0 && <div className="p-10 text-center text-silver/40 font-medium">No se encontraron equipos.</div>}
+
+                {/* PAGINACIÓN */}
+                {equiposFiltrados.length > POR_PAGINA && (
+                    <div className="flex items-center justify-between p-4 border-t border-white/5 text-sm">
+                        <span className="text-silver/50 font-medium">
+                            Mostrando {(paginaActual - 1) * POR_PAGINA + 1}–{Math.min(paginaActual * POR_PAGINA, equiposFiltrados.length).toLocaleString("es-ES")} de {equiposFiltrados.length.toLocaleString("es-ES")} equipos
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setPagina(p => Math.max(1, p - 1))}
+                                disabled={paginaActual <= 1}
+                                className="px-4 py-1.5 rounded-lg bg-navy border border-white/5 font-bold text-silver/80 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            >
+                                ← Anterior
+                            </button>
+                            <span className="font-display font-black text-orange text-glow-orange px-2">
+                                {paginaActual} / {totalPaginas}
+                            </span>
+                            <button
+                                onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+                                disabled={paginaActual >= totalPaginas}
+                                className="px-4 py-1.5 rounded-lg bg-navy border border-white/5 font-bold text-silver/80 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Siguiente →
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* MODAL */}

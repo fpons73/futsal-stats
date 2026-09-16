@@ -89,19 +89,26 @@ async fn guardar_carpeta_datos(
             _ => return Err("No se encontró la base de datos activa".to_string()),
         }
     };
+    // Validar y extender ANTES de persistir: una carpeta inválida o inexistente
+    // nunca debe quedar guardada en Preferencia (antes se persistía primero y
+    // una carpeta mala quedaba en la BD aunque el comando devolviera error).
+    extender_alcances(&app, std::path::Path::new(&carpeta))?;
+
     sqlx::query("INSERT OR REPLACE INTO Preferencia (clave, valor) VALUES (?1, ?2)")
         .bind(CLAVE_PREF_CARPETA_DATOS)
         .bind(&carpeta)
         .execute(&pool)
         .await
         .map_err(|e| e.to_string())?;
-    extender_alcances(&app, std::path::Path::new(&carpeta))
+    Ok(())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
-pub fn run() {
-    // Definimos las migraciones (tu base de datos)
-    let migrations = vec![
+/// Lista única de migraciones de la app. La usa `run()` para el arranque real
+/// y el test de integración `tests/migraciones.rs` para aplicarlas a una BD
+/// virgen y detectar migraciones rotas antes de llegar a producción.
+pub fn migraciones() -> Vec<Migration> {
+    vec![
         Migration {
             version: 1,
             description: "create_initial_tables",
@@ -175,7 +182,11 @@ pub fn run() {
             sql: include_str!("../migrations/12_posicion_inicial.sql"),
             kind: MigrationKind::Up,
         },
-    ];
+    ]
+}
+
+pub fn run() {
+    let migrations = migraciones();
 
     tauri::Builder::default()
         // 1. Plugin de Base de Datos

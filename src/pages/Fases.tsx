@@ -78,7 +78,10 @@ export default function Fases() {
             if (res.length > 0) {
                 setEdicionSeleccionada(res[0].id.toString());
             }
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al cargar las ediciones");
+        }
     }
 
     async function cargarFases(edicionId: number) {
@@ -97,7 +100,10 @@ export default function Fases() {
             } else {
                 setOrden(1);
             }
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al cargar las fases");
+        }
     }
 
     // --- CRUD ---

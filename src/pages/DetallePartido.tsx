@@ -318,7 +318,10 @@ export default function DetallePartido() {
                 if (p.formacion_visitante) setFormacionVisitante(p.formacion_visitante);
                 if (plantillaLocal.length === 0) cargarPlantillas(p.edicion_id, p.local_id, p.visitante_id);
             }
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            toast.error("Error al cargar el partido");
+        }
     }
 
     async function cargarPlantillas(edicionId: number, localId: number, visId: number) {
@@ -371,7 +374,10 @@ export default function DetallePartido() {
             setPlantillaVisitante(await getPersonas(visId));
             limpiarActaSucia(); // el estado en pantalla vuelve a ser el de la BD
             revisarBorrador(); // primera carga: ¿hay un borrador sin guardar de otra sesión?
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            toast.error("Error al cargar las plantillas del partido");
+        }
     }
 
     // --- RECUPERACIÓN DEL BORRADOR ---
@@ -838,7 +844,10 @@ export default function DetallePartido() {
                 WHERE e.partido_id = $1 ORDER BY e.minuto ASC, e.id ASC
             `, [id]);
             setEventos(res);
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            toast.error("Error al cargar los eventos del partido");
+        }
     }
 
     async function onEventoGuardado() {
@@ -907,7 +916,10 @@ export default function DetallePartido() {
             clearEventoBorrado();
             await cargarEventos();
             await cargarPartido();
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            toast.error("No se pudo restaurar el evento");
+        }
     }
 
     async function borrarEvento(ev: Evento) {
@@ -933,7 +945,10 @@ export default function DetallePartido() {
             }
             await cargarEventos();
             pushEventoBorrado(ev);
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            toast.error("No se pudo eliminar el evento");
+        }
     }
 
     const renderEvento = (ev: Evento) => {

@@ -44,6 +44,7 @@ export default function Confederaciones() {
             setData(res);
         } catch (error) {
             console.error("Error cargando:", error);
+            toast.error("Error al cargar las confederaciones");
         }
     }
 
@@ -60,6 +61,7 @@ export default function Confederaciones() {
             }
         } catch (error) {
             console.error("Error seleccionando archivo:", error);
+            toast.error("No se pudo abrir el selector de archivos");
         }
     }
 

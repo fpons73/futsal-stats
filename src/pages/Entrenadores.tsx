@@ -73,7 +73,10 @@ export default function Entrenadores() {
             // FILTRAMOS POR ROL 'Entrenador'
             const resEnt = await db.select<Entrenador[]>(`SELECT * FROM Persona WHERE roles LIKE '%Entrenador%' ORDER BY nombre_deportivo ASC`);
             setEntrenadores(resEnt);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al cargar los entrenadores");
+        }
     }
 
     async function seleccionarFoto() {
@@ -83,7 +86,10 @@ export default function Entrenadores() {
                 filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif'] }]
             });
             if (file) setFormData({ ...formData, foto: file as string });
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo abrir el selector de archivos");
+        }
     }
 
     function abrirCrear() {

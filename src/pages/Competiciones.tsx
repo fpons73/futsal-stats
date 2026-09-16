@@ -64,7 +64,10 @@ export default function Competiciones() {
             setPaises(resPais);
             const resConf = await db.select<Confederacion[]>("SELECT id, codigo, logo_path FROM Confederacion ORDER BY codigo ASC");
             setConfederaciones(resConf);
-        } catch (error) { console.error(error); }
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al cargar las competiciones");
+        }
     }
 
     async function seleccionarLogo() {
@@ -75,7 +78,10 @@ export default function Competiciones() {
                 filters: [{ name: 'Imágenes', extensions: ['png', 'jpg', 'jpeg', 'svg', 'webp', 'gif'] }]
             });
             if (file) setLogoPath(file as string);
-        } catch (err) { console.error(err); }
+        } catch (err) {
+            console.error(err);
+            toast.error("No se pudo abrir el selector de archivos");
+        }
     }
 
     function abrirCrear() {

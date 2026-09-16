@@ -44,6 +44,7 @@ export default function Temporadas() {
             setTemporadas(res);
         } catch (error) {
             console.error("Error cargando temporadas:", error);
+            toast.error("Error al cargar las temporadas");
         }
     }
 

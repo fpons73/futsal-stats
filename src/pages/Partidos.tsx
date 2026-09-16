@@ -1201,7 +1201,10 @@ export default function Partidos() {
 
             const res = await db.select<Partido[]>(query, params);
             setPartidos(res);
-        } catch (e) { console.error(e); }
+        } catch (e) {
+            console.error(e);
+            toast.error("Error al filtrar los partidos");
+        }
     }
 
     // --- CRUD ---
