@@ -146,7 +146,7 @@ Detalles importantes:
 ## Tests y CI
 
 ```bash
-npm test                        # 231 tests de frontend (Vitest)
+npm test                        # 236 tests de frontend (Vitest)
 cd src-tauri && cargo test      # migraciones + tests de la lib
 ```
 
@@ -154,6 +154,14 @@ GitHub Actions (`.github/workflows/ci.yml`) ejecuta en cada push a `main`:
 
 - **Frontend**: `tsc --noEmit` + Vitest.
 - **Rust**: migraciones sobre BD virgen + tests unitarios de la lib.
+
+## Desarrollo y verificación E2E
+
+Para probar en la app real (diálogos nativos, puente Tauri, alcance `fs`, rendimiento
+con 70k registros, capturas) hay un conjunto de scripts CDP/UIA en [`scripts/`](./scripts),
+documentados en el [README de scripts](./scripts/README.md): cómo lanzar la app con el
+puerto de depuración, las dos rutas de importación (diálogo nativo vs. ruta predefinida)
+y las verificaciones página a página.
 
 ## Licencia
 

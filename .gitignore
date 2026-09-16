@@ -47,3 +47,4 @@ pantalla_diag.png
 pnpm-lock.yaml
 pnpm-workspace.yaml
 logs_*.txt
+*.log
