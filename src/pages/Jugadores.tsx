@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Plus, Search, Trash2, Edit, Eye, Filter, User, Upload, X, Calendar } from "lucide-react";
+import { Plus, Search, Trash2, Edit, Eye, Filter, User, Upload, X, Calendar, AlertTriangle } from "lucide-react";
 import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
 import ImagenLocal from "../components/ImagenLocal";
@@ -250,6 +250,13 @@ export default function Jugadores() {
         }
     };
 
+    // Personas importadas sin nacionalidad (el CSV de origen no traía país).
+    // Tienen filtro propio para poder repararlas manualmente desde aquí.
+    const totalSinNacionalidad = useMemo(
+        () => jugadores.filter(j => !j.nacionalidad_principal_id).length,
+        [jugadores]
+    );
+
     // Índice de texto normalizado por jugador: una sola vez por carga de datos.
     const indiceBusqueda = useMemo(() => {
         const mapa = new Map<number, string>();
@@ -261,7 +268,11 @@ export default function Jugadores() {
         const busquedaNorm = normalizeString(busqueda);
         return jugadores.filter(j => {
             if (busquedaNorm && !(indiceBusqueda.get(j.id)?.includes(busquedaNorm))) return false;
-            if (filtroPais !== "todos" && j.nacionalidad_principal_id?.toString() !== filtroPais) return false;
+            if (filtroPais === "sin") {
+                if (j.nacionalidad_principal_id) return false;
+            } else if (filtroPais !== "todos" && j.nacionalidad_principal_id?.toString() !== filtroPais) {
+                return false;
+            }
             if (filtroPos !== "todas" && j.posicion_principal !== filtroPos) return false;
             return true;
         });
@@ -287,6 +298,16 @@ export default function Jugadores() {
                         <User className="text-orange text-glow-orange animate-pulse" /> Jugadores
                     </h1>
                     <p className="text-silver/50 text-sm mt-1">{jugadores.length.toLocaleString("es-ES")} jugadores registrados en el sistema</p>
+                    {totalSinNacionalidad > 0 && (
+                        <button
+                            onClick={() => setFiltroPais("sin")}
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20 transition-colors"
+                            title="Personas importadas sin nacionalidad en el CSV de origen. Clic para filtrarlas."
+                        >
+                            <AlertTriangle size={12} />
+                            {totalSinNacionalidad.toLocaleString("es-ES")} sin nacionalidad — revisar
+                        </button>
+                    )}
                 </div>
                 <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     <Plus size={20} /> <span>Nuevo</span>
@@ -303,6 +324,9 @@ export default function Jugadores() {
                     <Filter size={18} className="text-silver/40" />
                     <select value={filtroPais} onChange={e => setFiltroPais(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold">
                         <option value="todos">Todos los Países</option>
+                        {totalSinNacionalidad > 0 && (
+                            <option value="sin">⚠ Sin nacionalidad — {totalSinNacionalidad.toLocaleString("es-ES")}</option>
+                        )}
                         {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </select>
                     <select value={filtroPos} onChange={e => setFiltroPos(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold">
@@ -311,6 +335,17 @@ export default function Jugadores() {
                     </select>
                 </div>
             </div>
+
+            {filtroPais === "sin" && (
+                <div className="glass-panel p-4 rounded-xl border border-warning/30 mb-6 flex items-center gap-3 bg-warning/5">
+                    <AlertTriangle size={20} className="text-warning shrink-0" />
+                    <p className="text-sm text-silver/70">
+                        Mostrando las <strong className="text-warning">{jugadoresFiltrados.length.toLocaleString("es-ES")} personas sin nacionalidad conocida</strong>: el CSV de origen no traía país para ellas.
+                        Edita cada ficha para asignar su nacionalidad real.
+                    </p>
+                    <button onClick={() => setFiltroPais("todos")} className="ml-auto text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl bg-navy-light text-silver hover:text-white border border-white/10 transition-colors">Quitar filtro</button>
+                </div>
+            )}
 
             {/* TABLA */}
             <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
@@ -343,8 +378,16 @@ export default function Jugadores() {
                                     </td>
                                     <td className="p-4 text-center">
                                         <div className="flex justify-center gap-1.5">
-                                            {getBandera(j.nacionalidad_principal_id) && <img src={getBandera(j.nacionalidad_principal_id)!} className="w-6 h-4 border border-white/10 shadow-sm rounded-sm" />}
-                                            {getBandera(nac2Id) && <img src={getBandera(nac2Id)!} className="w-6 h-4 border border-white/10 shadow-sm opacity-80 rounded-sm" />}
+                                            {j.nacionalidad_principal_id ? (
+                                                <>
+                                                    {getBandera(j.nacionalidad_principal_id) && <img src={getBandera(j.nacionalidad_principal_id)!} className="w-6 h-4 border border-white/10 shadow-sm rounded-sm" />}
+                                                    {getBandera(nac2Id) && <img src={getBandera(nac2Id)!} className="w-6 h-4 border border-white/10 shadow-sm opacity-80 rounded-sm" />}
+                                                </>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-warning" title="Sin nacionalidad conocida: edítala y asigna el país real">
+                                                    <AlertTriangle size={11} /> Sin nac.
+                                                </span>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="p-4 text-center font-display font-bold text-sm text-white">

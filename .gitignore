@@ -39,3 +39,9 @@ calendario_texto.txt
 
 # Build artifacts
 src-tauri/target/
+
+# Diagnostics and stray artifacts
+pantalla_diag.png
+pnpm-lock.yaml
+pnpm-workspace.yaml
+logs_*.txt

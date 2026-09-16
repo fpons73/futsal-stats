@@ -1,8 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
-import { Plus, Search, Trash2, Edit, Eye, Filter, UserCog, Upload, X, Calendar } from "lucide-react";
+import { Plus, Search, Trash2, Edit, Eye, Filter, UserCog, Upload, X, Calendar, AlertTriangle } from "lucide-react";
 import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
@@ -34,9 +34,19 @@ export default function Entrenadores() {
     const [entrenadores, setEntrenadores] = useState<Entrenador[]>([]);
     const [paises, setPaises] = useState<Pais[]>([]);
 
-    // Filtros
+    // Filtros. La búsqueda pasa por un debounce de 200ms: recalcula el
+    // índice en cada tecla congela la escritura.
+    const [busquedaInput, setBusquedaInput] = useState("");
     const [busqueda, setBusqueda] = useState("");
+    useEffect(() => {
+        const t = setTimeout(() => setBusqueda(busquedaInput), 200);
+        return () => clearTimeout(t);
+    }, [busquedaInput]);
     const [filtroPais, setFiltroPais] = useState("todos");
+
+    // Paginación de render: miles de filas con imágenes congelarían la pestaña.
+    const POR_PAGINA = 100;
+    const [pagina, setPagina] = useState(1);
 
     // Modales
     const [modalFormOpen, setModalFormOpen] = useState(false);
@@ -202,13 +212,43 @@ export default function Entrenadores() {
         return paises.find(x => x.id == idPais)?.nombre || "";
     }
 
-    const entrenadoresFiltrados = entrenadores.filter(e => {
+    // Entrenadores importados sin nacionalidad (el CSV de origen no traía país):
+    // filtro propio para poder repararlos manualmente desde aquí.
+    const totalSinNacionalidad = useMemo(
+        () => entrenadores.filter(e => !e.nacionalidad_principal_id).length,
+        [entrenadores]
+    );
+
+    // Índice de texto normalizado: una sola vez por carga de datos (no por tecla).
+    const indiceBusqueda = useMemo(() => {
+        const mapa = new Map<number, string>();
+        for (const e of entrenadores) mapa.set(e.id, normalizeString(e.nombre_deportivo + " " + e.nombre + " " + e.apellidos));
+        return mapa;
+    }, [entrenadores]);
+
+    const entrenadoresFiltrados = useMemo(() => {
         const busquedaNorm = normalizeString(busqueda);
-        const textoNorm = normalizeString(e.nombre_deportivo + e.nombre + e.apellidos);
-        const matchTexto = textoNorm.includes(busquedaNorm);
-        const matchPais = filtroPais === "todos" || e.nacionalidad_principal_id?.toString() === filtroPais;
-        return matchTexto && matchPais;
-    });
+        return entrenadores.filter(e => {
+            if (busquedaNorm && !(indiceBusqueda.get(e.id)?.includes(busquedaNorm))) return false;
+            if (filtroPais === "sin") {
+                if (e.nacionalidad_principal_id) return false;
+            } else if (filtroPais !== "todos" && e.nacionalidad_principal_id?.toString() !== filtroPais) {
+                return false;
+            }
+            return true;
+        });
+    }, [entrenadores, indiceBusqueda, busqueda, filtroPais]);
+
+    // Ventana visible + reset a la primera página cuando cambian los filtros.
+    const totalPaginas = Math.max(1, Math.ceil(entrenadoresFiltrados.length / POR_PAGINA));
+    const paginaActual = Math.min(pagina, totalPaginas);
+    const entrenadoresVisibles = useMemo(
+        () => entrenadoresFiltrados.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA),
+        [entrenadoresFiltrados, paginaActual]
+    );
+    useEffect(() => {
+        setPagina(1);
+    }, [busqueda, filtroPais]);
 
     return (
         <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
@@ -219,7 +259,17 @@ export default function Entrenadores() {
                     <h1 className="text-2xl font-display font-black text-white flex items-center gap-3">
                         <UserCog className="text-orange text-glow-orange animate-pulse" /> Entrenadores
                     </h1>
-                    <p className="text-silver/50 text-sm mt-1">{entrenadores.length} técnicos registrados en el sistema</p>
+                    <p className="text-silver/50 text-sm mt-1">{entrenadores.length.toLocaleString("es-ES")} técnicos registrados en el sistema</p>
+                    {totalSinNacionalidad > 0 && (
+                        <button
+                            onClick={() => setFiltroPais("sin")}
+                            className="mt-2 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-warning/10 text-warning border border-warning/30 hover:bg-warning/20 transition-colors"
+                            title="Entrenadores importados sin nacionalidad en el CSV de origen. Clic para filtrarlos."
+                        >
+                            <AlertTriangle size={12} />
+                            {totalSinNacionalidad.toLocaleString("es-ES")} sin nacionalidad — revisar
+                        </button>
+                    )}
                 </div>
                 <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                     <Plus size={20} /> <span>Nuevo</span>
@@ -230,16 +280,30 @@ export default function Entrenadores() {
             <div className="glass-panel p-4 rounded-xl border border-white/5 mb-6 flex flex-wrap items-center gap-4">
                 <div className="flex-1 min-w-[200px] flex items-center gap-3 bg-navy-light/60 px-3 py-2 rounded-xl border border-white/5">
                     <Search className="text-silver/40" size={18} />
-                    <input value={busqueda} onChange={e => setBusqueda(e.target.value)} placeholder="Buscar entrenador..." className="bg-transparent outline-none w-full text-white placeholder-silver/40 text-sm" />
+                    <input value={busquedaInput} onChange={e => setBusquedaInput(e.target.value)} placeholder="Buscar entrenador..." className="bg-transparent outline-none w-full text-white placeholder-silver/40 text-sm" />
                 </div>
                 <div className="flex items-center gap-2">
                     <Filter size={18} className="text-silver/40" />
                     <select value={filtroPais} onChange={e => setFiltroPais(e.target.value)} className="p-2 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold">
                         <option value="todos">Todos los Países</option>
+                        {totalSinNacionalidad > 0 && (
+                            <option value="sin">⚠ Sin nacionalidad — {totalSinNacionalidad.toLocaleString("es-ES")}</option>
+                        )}
                         {paises.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
                     </select>
                 </div>
             </div>
+
+            {filtroPais === "sin" && (
+                <div className="glass-panel p-4 rounded-xl border border-warning/30 mb-6 flex items-center gap-3 bg-warning/5">
+                    <AlertTriangle size={20} className="text-warning shrink-0" />
+                    <p className="text-sm text-silver/70">
+                        Mostrando los <strong className="text-warning">{entrenadoresFiltrados.length.toLocaleString("es-ES")} entrenadores sin nacionalidad conocida</strong>: el CSV de origen no traía país para ellos.
+                        Edita cada ficha para asignar su nacionalidad real.
+                    </p>
+                    <button onClick={() => setFiltroPais("todos")} className="ml-auto text-xs font-bold uppercase tracking-wider px-3 py-1.5 rounded-xl bg-navy-light text-silver hover:text-white border border-white/10 transition-colors">Quitar filtro</button>
+                </div>
+            )}
 
             {/* TABLA */}
             <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden shadow-2xl">
@@ -254,7 +318,7 @@ export default function Entrenadores() {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 text-silver/80">
-                        {entrenadoresFiltrados.map((e) => {
+                        {entrenadoresVisibles.map((e) => {
                             let nac2Id = null;
                             try { nac2Id = JSON.parse(e.nacionalidades_secundarias)[0]; } catch { }
 
@@ -271,8 +335,16 @@ export default function Entrenadores() {
                                     </td>
                                     <td className="p-4 text-center">
                                         <div className="flex justify-center gap-1.5">
-                                            {getBandera(e.nacionalidad_principal_id) && <img src={getBandera(e.nacionalidad_principal_id)!} className="w-6 h-4 border border-white/10 shadow-sm rounded-sm" />}
-                                            {getBandera(nac2Id) && <img src={getBandera(nac2Id)!} className="w-6 h-4 border border-white/10 shadow-sm opacity-80 rounded-sm" />}
+                                            {e.nacionalidad_principal_id ? (
+                                                <>
+                                                    {getBandera(e.nacionalidad_principal_id) && <img src={getBandera(e.nacionalidad_principal_id)!} className="w-6 h-4 border border-white/10 shadow-sm rounded-sm" />}
+                                                    {getBandera(nac2Id) && <img src={getBandera(nac2Id)!} className="w-6 h-4 border border-white/10 shadow-sm opacity-80 rounded-sm" />}
+                                                </>
+                                            ) : (
+                                                <span className="inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-warning" title="Sin nacionalidad conocida: edítala y asigna el país real">
+                                                    <AlertTriangle size={11} /> Sin nac.
+                                                </span>
+                                            )}
                                         </div>
                                     </td>
                                     <td className="p-4 text-center font-display font-bold text-sm text-white">
@@ -289,6 +361,34 @@ export default function Entrenadores() {
                     </tbody>
                 </table>
                 {entrenadoresFiltrados.length === 0 && <div className="p-10 text-center text-silver/40 font-medium">No se encontraron entrenadores.</div>}
+
+                {/* PAGINACIÓN */}
+                {entrenadoresFiltrados.length > POR_PAGINA && (
+                    <div className="flex items-center justify-between p-4 border-t border-white/5 text-sm">
+                        <span className="text-silver/50 font-medium">
+                            Mostrando {(paginaActual - 1) * POR_PAGINA + 1}–{Math.min(paginaActual * POR_PAGINA, entrenadoresFiltrados.length).toLocaleString("es-ES")} de {entrenadoresFiltrados.length.toLocaleString("es-ES")} entrenadores
+                        </span>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setPagina(p => Math.max(1, p - 1))}
+                                disabled={paginaActual <= 1}
+                                className="px-4 py-1.5 rounded-lg bg-navy border border-white/5 font-bold text-silver/80 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            >
+                                ← Anterior
+                            </button>
+                            <span className="font-display font-black text-orange text-glow-orange px-2">
+                                {paginaActual} / {totalPaginas.toLocaleString("es-ES")}
+                            </span>
+                            <button
+                                onClick={() => setPagina(p => Math.min(totalPaginas, p + 1))}
+                                disabled={paginaActual >= totalPaginas}
+                                className="px-4 py-1.5 rounded-lg bg-navy border border-white/5 font-bold text-silver/80 hover:text-white hover:bg-white/5 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            >
+                                Siguiente →
+                            </button>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* --- MODAL FORMULARIO --- */}
