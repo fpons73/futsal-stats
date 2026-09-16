@@ -2,6 +2,7 @@
 name = "futsal-stats"
 version = "0.1.0"
 description = "A Tauri App"
+license = "MIT"
 authors = ["FcoP11"]
 edition = "2021"
 
