@@ -49,6 +49,25 @@ describe("resolverPais", () => {
     expect(r.aviso).toBeUndefined();
   });
 
+  it("alias de países africanos en PT: Bissau, RD Congo, Quénia y Eritreia", async () => {
+    const paises = [
+      ...PAISES,
+      { id: 86, nombre: "Guinea Bissau" },
+      { id: 188, nombre: "R.D. Congo" },
+      { id: 124, nombre: "Kenia" },
+      { id: 61, nombre: "Eritrea" },
+    ];
+    const bissau = await resolverPais(paises, "Bissau");
+    expect(bissau.id).toBe(86); // Guinea Bissau (PT 'Bissau')
+    const rdc = await resolverPais(paises, "RD Congo");
+    expect(rdc.id).toBe(188); // R.D. Congo (PT 'RD Congo')
+    const kenia = await resolverPais(paises, "Quénia");
+    expect(kenia.id).toBe(124); // Kenia (PT 'Quénia')
+    const eritrea = await resolverPais(paises, "Eritreia");
+    expect(eritrea.id).toBe(61); // Eritrea (PT 'Eritreia')
+    expect(eritrea.aviso).toBeUndefined();
+  });
+
   it("el match directo normalizado sigue funcionando ('Itália' → Italia sin alias)", async () => {
     const conItalia = [...PAISES, { id: 5, nombre: "Italia" }];
     const r = await resolverPais(conItalia, "Itália");

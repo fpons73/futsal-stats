@@ -50,9 +50,16 @@ Write-Output ("DIALOGO_OK hwnd=" + $dialogo)
 
 $el = [System.Windows.Automation.AutomationElement]::FromHandle($dialogo)
 
-# Campo de nombre de fichero: primer Edit descendiente del diálogo
+# Campo de nombre de fichero: primer Edit descendiente del diálogo.
+# El árbol UIA puede tardar en poblarse tras abrir el diálogo: reintento 10s.
 $condEdit = New-Object System.Windows.Automation.PropertyCondition([System.Windows.Automation.AutomationElement]::ControlTypeProperty, [System.Windows.Automation.ControlType]::Edit)
-$campo = $el.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condEdit)
+$campo = $null
+for ($i = 0; $i -lt 20; $i++) {
+    $campo = $el.FindFirst([System.Windows.Automation.TreeScope]::Descendants, $condEdit)
+    if ($campo) { break }
+    Start-Sleep -Milliseconds 500
+    $el = [System.Windows.Automation.AutomationElement]::FromHandle($dialogo)
+}
 if (-not $campo) { Write-Output "CAMPO_NO_ENCONTRADO"; exit 1 }
 ($campo.GetCurrentPattern([System.Windows.Automation.ValuePattern]::Pattern)).SetValue($Ruta)
 Write-Output "RUTA_ESCRITA"

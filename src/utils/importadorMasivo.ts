@@ -17,6 +17,7 @@ export const ALIAS_PAIS: Record<string, string> = {
   "azerbaijao": "Azerbaiyán",
   "barem": "Baréin",
   "bielorrussia": "Bielorrusia",
+  "bissau": "Guinea Bissau",
   "bosnia e herzegovina": "Bosnia y Herzegovina",
   "camaroes": "Camerún",
   "cazaquistao": "Kazajistán",
@@ -26,6 +27,7 @@ export const ALIAS_PAIS: Record<string, string> = {
   "egito": "Egipto",
   "emirados arabes unidos": "Emiratos Árabes Unidos",
   "equador": "Ecuador",
+  "eritreia": "Eritrea",
   "espanha": "España",
   "franca": "Francia",
   "gana": "Ghana",
@@ -54,7 +56,9 @@ export const ALIAS_PAIS: Record<string, string> = {
   "pais de gales": "Gales",
   "paises baixos": "Países Bajos",
   "porto rico": "Puerto Rico",
+  "quenia": "Kenia",
   "quirguistao": "Kirguistán",
+  "rd congo": "R.D. Congo",
   "republica da coreia": "Corea del Sur",
   "republica da irlanda": "Irlanda",
   "romenia": "Rumanía",
@@ -115,8 +119,8 @@ export async function resolverPais(
  * Importa equipos masivamente desde un CSV
  * Formato: nombre, abreviatura, categoria, pais_nombre, color1, color2
  */
-export async function importarEquiposCSV(): Promise<string> {
-  const selected = await open({
+export async function importarEquiposCSV(rutaPredefinida?: string): Promise<string> {
+  const selected = rutaPredefinida ?? await open({
     filters: [{ name: "CSV", extensions: ["csv"] }],
     multiple: false,
   });
@@ -191,11 +195,47 @@ export async function importarEquiposCSV(): Promise<string> {
 }
 
 /**
- * Importa jugadores masivamente desde un CSV
- * Formato: nombre, apellidos, nombre_deportivo, fecha_nacimiento, nacionalidad, posicion_principal, posiciones_secundarias, foto_path
+ * Deriva los apellidos quitando del nombre completo los tokens iniciales que
+ * forman el nombre deportivo ("Rui Tiago Dantas da Silva" + "Rui Silva" →
+ * "Dantas da Silva"). Si no hay prefijo que casar, devuelve el completo.
  */
-export async function importarJugadoresCSV(): Promise<string> {
-  const selected = await open({
+function derivarApellidos(nombreCompleto: string, deportivo: string): string {
+  const nc = (nombreCompleto ?? "").trim();
+  const dep = (deportivo ?? "").trim();
+  if (!nc) return "";
+  if (!dep) return nc;
+  const depTokens = normalizeString(dep).split(/\s+/).filter(Boolean);
+  const ncTokens = nc.split(/\s+/).filter(Boolean);
+  let i = 0;
+  for (const t of depTokens) {
+    if (i < ncTokens.length && normalizeString(ncTokens[i]) === t) i++;
+    else break;
+  }
+  const resto = ncTokens.slice(i).join(" ").trim();
+  return resto || nc;
+}
+
+/** Posiciones abreviadas del CSV (PT) → catálogo de la app. */
+const MAP_POSICION_CSV: Record<string, string> = {
+  "a": "Ala",
+  "med": "Ala", // medio/medio-campista: sin equivalente fino, Ala genérica
+  "def": "Cierre",
+  "gr": "Portero", // guarda-redes
+};
+
+/**
+ * Importa jugadores masivamente desde un CSV.
+ * Columnas esperadas (Futsal_Data): id, nombre (deportivo), nombre_completo,
+ * posicion (A|Med|Def|Gr), dorsal, pais (en PT), fecha_nacimiento, edad,
+ * equipo_actual, titulos, url, foto_url, genero.
+ * - Apellidos derivados de nombre_completo menos el nombre deportivo.
+ * - País: match sin acentos + ALIAS_PAIS (PT→ES); sin país → NULL (columna
+ *   nullable, no se inventa nacionalidad); no encontrado → NULL + aviso.
+ * - Idempotente: omite (nombre_deportivo + fecha_nacimiento) ya presentes.
+ * - foto_url del CSV es ruta web del site de origen, no fichero local: no se guarda.
+ */
+export async function importarJugadoresCSV(rutaPredefinida?: string): Promise<string> {
+  const selected = rutaPredefinida ?? await open({
     filters: [{ name: "CSV", extensions: ["csv"] }],
     multiple: false,
   });
@@ -210,26 +250,63 @@ export async function importarJugadoresCSV(): Promise<string> {
     paises.map((p) => [normalizeString(p.nombre), p.id]),
   );
 
-  let importados = 0, errores = 0;
+  // Idempotencia: (nombre_deportivo normalizado + fecha_nacimiento) como clave.
+  const existentes = await db.select<any[]>(
+    "SELECT nombre_deportivo, fecha_nacimiento FROM Persona",
+  );
+  const clavesExistentes = new Set(
+    existentes.map((p) =>
+      normalizeString(String(p.nombre_deportivo ?? "").trim()) +
+      "|" + String(p.fecha_nacimiento ?? "").trim(),
+    ),
+  );
+
+  let importados = 0, omitidos = 0, errores = 0, sinPais = 0;
   const paisesNoEncontrados = new Map<string, number>();
 
   for (const row of parsed.data) {
     try {
-      const clavePais = normalizeString((row.nacionalidad || row.pais || "").trim());
-      const paisId = clavePais ? paisesMap.get(clavePais) ?? null : null;
-      if (clavePais && paisId === null) {
-        const etiqueta = (row.nacionalidad || row.pais || "").trim();
-        paisesNoEncontrados.set(etiqueta, (paisesNoEncontrados.get(etiqueta) ?? 0) + 1);
+      const deportivo = String(row.nombre_deportivo ?? row.nombre ?? "").trim();
+      const claveJug =
+        normalizeString(deportivo) + "|" + String(row.fecha_nacimiento ?? "").trim();
+      if (!deportivo || clavesExistentes.has(claveJug)) {
+        omitidos++;
+        continue;
       }
+
+      // País: normalizado → alias PT→ES → NULL contado (nunca país inventado)
+      const etiquetaPais = String(row.pais ?? row.nacionalidad ?? "").trim();
+      const clavePais = normalizeString(etiquetaPais);
+      let paisId: number | null = null;
+      if (!clavePais) {
+        sinPais++;
+      } else {
+        paisId = paisesMap.get(clavePais) ?? null;
+        if (paisId === null) {
+          const destino = ALIAS_PAIS[clavePais];
+          if (destino) paisId = paisesMap.get(normalizeString(destino)) ?? null;
+        }
+        if (paisId === null) {
+          paisesNoEncontrados.set(etiquetaPais, (paisesNoEncontrados.get(etiquetaPais) ?? 0) + 1);
+        }
+      }
+
+      const posicion =
+        MAP_POSICION_CSV[normalizeString(String(row.posicion ?? "").trim())] ?? "Ala";
+
       await db.execute(`
         INSERT INTO Persona (nombre, apellidos, nombre_deportivo, fecha_nacimiento, nacionalidad_principal_id, posicion_principal, posiciones_secundarias, foto_path, roles)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'Jugador')
+        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 'Jugador')
       `, [
-        row.nombre || "", row.apellidos || "", row.nombre_deportivo || row.nombre || "",
-        row.fecha_nacimiento || null, paisId,
-        row.posicion_principal || "Ala", row.posiciones_secundarias || "",
-        row.foto_path || null
+        deportivo,
+        derivarApellidos(row.nombre_completo, deportivo),
+        deportivo,
+        row.fecha_nacimiento || null,
+        paisId,
+        posicion,
+        row.posiciones_secundarias || "",
       ]);
+      clavesExistentes.add(claveJug);
       importados++;
     } catch (e) {
       console.error("Error importando jugador:", e);
@@ -237,7 +314,108 @@ export async function importarJugadoresCSV(): Promise<string> {
     }
   }
 
-  let detalle = `${importados} jugadores importados, ${errores} errores.`;
+  let detalle = `${importados} jugadores importados, ${omitidos} omitidos (ya existían), ${errores} errores.`;
+  if (sinPais > 0) detalle += ` ${sinPais} sin nacionalidad en el CSV (quedaron sin país).`;
+  if (paisesNoEncontrados.size > 0) {
+    const resumen = [...paisesNoEncontrados.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([p, n]) => `${p} ×${n}`)
+      .join(", ");
+    detalle += ` PAÍSES NO ENCONTRADOS (quedaron sin nacionalidad): ${resumen}`;
+  }
+  return detalle;
+}
+
+/**
+ * Importador de ENTRENADORES (Enciclopedia_Futsal_Entrenadores_Masculino*.csv).
+ * Columnas reales del CSV: id, nombre, nombre_completo, pais, fecha_nacimiento,
+ * edad, equipo_actual, titulos, url, foto_url, genero.
+ * - roles = 'Entrenador' (plano): las queries de la app filtran con
+ *   LIKE '%Entrenador%' y los editores ya persisten el valor plano.
+ * - País: match sin acentos + ALIAS_PAIS (PT→ES); sin país → NULL contado;
+ *   no encontrado → NULL + aviso (nunca país inventado).
+ * - Idempotente: omite (nombre_deportivo normalizado + fecha_nacimiento) ya
+ *   presentes, el mismo criterio que importarJugadoresCSV — así un entrenador
+ *   que también aparece en los CSV de jugadores no se inserta dos veces.
+ * - foto_url es ruta web del site de origen: no se guarda.
+ */
+export async function importarEntrenadoresCSV(rutaPredefinida?: string): Promise<string> {
+  const selected = rutaPredefinida ?? await open({
+    filters: [{ name: "CSV", extensions: ["csv"] }],
+    multiple: false,
+  });
+  if (!selected || typeof selected !== "string") return "Cancelado";
+
+  const content = await readTextFile(selected);
+  const parsed = Papa.parse<any>(content, { header: true, skipEmptyLines: true });
+  const db = await Database.load("sqlite:globalfutsal.db");
+
+  const paises = await db.select<any[]>("SELECT id, nombre FROM Pais");
+  const paisesMap = new Map(
+    paises.map((p) => [normalizeString(p.nombre), p.id]),
+  );
+
+  // Idempotencia con la MISMA clave que jugadores: (deportivo + fecha).
+  const existentes = await db.select<any[]>(
+    "SELECT nombre_deportivo, fecha_nacimiento FROM Persona",
+  );
+  const clavesExistentes = new Set(
+    existentes.map((p) =>
+      normalizeString(String(p.nombre_deportivo ?? "").trim()) +
+      "|" + String(p.fecha_nacimiento ?? "").trim(),
+    ),
+  );
+
+  let importados = 0, omitidos = 0, errores = 0, sinPais = 0;
+  const paisesNoEncontrados = new Map<string, number>();
+
+  for (const row of parsed.data) {
+    try {
+      const deportivo = String(row.nombre ?? "").trim();
+      const claveEnt =
+        normalizeString(deportivo) + "|" + String(row.fecha_nacimiento ?? "").trim();
+      if (!deportivo || clavesExistentes.has(claveEnt)) {
+        omitidos++;
+        continue;
+      }
+
+      const etiquetaPais = String(row.pais ?? "").trim();
+      const clavePais = normalizeString(etiquetaPais);
+      let paisId: number | null = null;
+      if (!clavePais) {
+        sinPais++;
+      } else {
+        paisId = paisesMap.get(clavePais) ?? null;
+        if (paisId === null) {
+          const destino = ALIAS_PAIS[clavePais];
+          if (destino) paisId = paisesMap.get(normalizeString(destino)) ?? null;
+        }
+        if (paisId === null) {
+          paisesNoEncontrados.set(etiquetaPais, (paisesNoEncontrados.get(etiquetaPais) ?? 0) + 1);
+        }
+      }
+
+      await db.execute(`
+        INSERT INTO Persona (nombre, apellidos, nombre_deportivo, fecha_nacimiento, nacionalidad_principal_id, posiciones_secundarias, foto_path, roles)
+        VALUES (?, ?, ?, ?, ?, '', NULL, 'Entrenador')
+      `, [
+        deportivo,
+        derivarApellidos(row.nombre_completo, deportivo),
+        deportivo,
+        row.fecha_nacimiento || null,
+        paisId,
+      ]);
+      clavesExistentes.add(claveEnt);
+      importados++;
+    } catch (e) {
+      console.error("Error importando entrenador:", e);
+      errores++;
+    }
+  }
+
+  let detalle = `${importados} entrenadores importados, ${omitidos} omitidos (ya existían), ${errores} errores.`;
+  if (sinPais > 0) detalle += ` ${sinPais} sin nacionalidad en el CSV (quedaron sin país).`;
   if (paisesNoEncontrados.size > 0) {
     const resumen = [...paisesNoEncontrados.entries()]
       .sort((a, b) => b[1] - a[1])

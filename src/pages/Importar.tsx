@@ -4,7 +4,7 @@ import Database from "@tauri-apps/plugin-sql";
 import { toast } from "../components/Toast";
 import { useEdicion } from "../context/EdicionContext";
 import { importarCalendarioCSV, importarCalendarioTexto } from "../utils/importadorCalendario";
-import { importarEquiposCSV, importarJugadoresCSV } from "../utils/importadorMasivo";
+import { importarEquiposCSV, importarJugadoresCSV, importarEntrenadoresCSV } from "../utils/importadorMasivo";
 import { generarRoundRobin, asignarPabellones, asignarFechas } from "../utils/generadorCalendario";
 import { seedConfederacionesFutsal } from "../utils/seedConfederaciones";
 import { seedCompeticionesFutsal } from "../utils/seedCompeticionesFutsal";
@@ -57,6 +57,17 @@ export default function Importar() {
     setCargando(true); setError(null); setResultado(null);
     try {
       const res = await importarJugadoresCSV();
+      setResultado(res);
+      toast.info(res);
+    } catch (e) {
+      if (!avisarSiRutaDenegada(e)) setError(String(e));
+    } finally { setCargando(false); }
+  };
+
+  const handleImportarEntrenadores = async () => {
+    setCargando(true); setError(null); setResultado(null);
+    try {
+      const res = await importarEntrenadoresCSV();
       setResultado(res);
       toast.info(res);
     } catch (e) {
@@ -155,6 +166,9 @@ export default function Importar() {
         </button>
         <button onClick={handleImportarJugadores} disabled={cargando} className="w-full text-left px-4 py-3 bg-gray-800/50 hover:bg-gray-800 rounded-lg text-gray-300 flex items-center gap-3 transition-colors disabled:opacity-50">
           <Download size={16} /> Importar jugadores (CSV)
+        </button>
+        <button onClick={handleImportarEntrenadores} disabled={cargando} className="w-full text-left px-4 py-3 bg-gray-800/50 hover:bg-gray-800 rounded-lg text-gray-300 flex items-center gap-3 transition-colors disabled:opacity-50">
+          <Download size={16} /> Importar entrenadores (CSV)
         </button>
       </div>
 
