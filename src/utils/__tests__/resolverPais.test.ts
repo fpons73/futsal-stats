@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { resolverPais } from "../importadorMasivo";
+import { resolverPais, derivarTipoCompeticion, derivarAmbitoCompeticion } from "../importadorMasivo";
 
 // Muestra mínima como la tabla Pais real (español, con acentos).
 const PAISES = [
@@ -72,6 +72,22 @@ describe("resolverPais", () => {
     const conItalia = [...PAISES, { id: 5, nombre: "Italia" }];
     const r = await resolverPais(conItalia, "Itália");
     expect(r.id).toBe(5);
+  });
+
+  it("derivarTipoCompeticion: Campeonato/Liga→Liga, Taça/Copa→Copa, resto→Torneo", () => {
+    expect(derivarTipoCompeticion("Campeonato Nacional (Clubes) - Anual")).toBe("Liga");
+    expect(derivarTipoCompeticion("Campeonato  (Clubes) - Anual")).toBe("Liga"); // doble espacio
+    expect(derivarTipoCompeticion("Taça Nacional (Clubes) - Anual")).toBe("Copa");
+    expect(derivarTipoCompeticion("Copa América")).toBe("Copa");
+    expect(derivarTipoCompeticion("Torneio Continental (Seleções) - Anual")).toBe("Torneo");
+    expect(derivarTipoCompeticion("")).toBe("Torneo");
+  });
+
+  it("derivarAmbitoCompeticion: (Seleções)→Selecciones, resto→Clubes", () => {
+    expect(derivarAmbitoCompeticion("Torneio Continental (Seleções) - Anual")).toBe("Selecciones");
+    expect(derivarAmbitoCompeticion("Campeonato Nacional (Clubes) - Anual")).toBe("Clubes");
+    expect(derivarAmbitoCompeticion("Torneio Nacional ()")).toBe("Clubes");
+    expect(derivarAmbitoCompeticion("")).toBe("Clubes");
   });
 
   it("alias cuyo destino no existe en la BD → null + aviso", async () => {

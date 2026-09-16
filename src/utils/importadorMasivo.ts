@@ -433,3 +433,130 @@ export async function importarEntrenadoresCSV(rutaPredefinida?: string): Promise
   }
   return detalle;
 }
+
+/**
+ * Deriva el tipo normalizado de una competición a partir del texto del CSV
+ * ("Campeonato Regional (Clubes) - Anual", "Taça Nacional (Clubes)"...).
+ * Devuelve los valores que ya usa la app: Liga | Copa | Torneo | Playoff.
+ */
+export function derivarTipoCompeticion(tipoCsv: string): "Liga" | "Copa" | "Torneo" | "Playoff" {
+  const t = normalizeString(tipoCsv);
+  if (t.includes("campeonato") || t.includes("liga")) return "Liga";
+  if (t.includes("copa") || t.includes("taca")) return "Copa";
+  return "Torneo";
+}
+
+/**
+ * Deriva el ámbito (Clubes | Selecciones) de un tipo del CSV. Los CSV traen
+ * "(Clubes)", "(Seleções)" o "()"; sin paréntesis válido se asume Clubes.
+ */
+export function derivarAmbitoCompeticion(tipoCsv: string): "Clubes" | "Selecciones" {
+  return normalizeString(tipoCsv).includes("selecoes") ? "Selecciones" : "Clubes";
+}
+
+/**
+ * Importador de COMPETICIONES (Enciclopedia_Futsal_Competicoes_Masculino*.csv).
+ * Columnas reales del CSV: id, nombre, pais, tipo, url, logo_url, genero.
+ * - Idempotente por (nombre normalizado + pais_id): reimportar el mismo CSV
+ *   no duplica nada.
+ * - País: match sin acentos + ALIAS_PAIS (PT→ES). Las filas continentales/
+ *   mundiales del CSV traen el nombre de la competición en la columna país
+ *   (basura) → pais_id NULL, contado aparte.
+ * - tipo se normaliza al vocabulario de la app (Liga | Copa | Torneo);
+ *   ambito distingue Clubes | Selecciones (con el paréntesis del CSV).
+ * - logo_url es ruta web del site de origen: no se guarda.
+ */
+export async function importarCompeticionesCSV(rutaPredefinida?: string): Promise<string> {
+  const selected = rutaPredefinida ?? await open({
+    filters: [{ name: "CSV", extensions: ["csv"] }],
+    multiple: false,
+  });
+  if (!selected || typeof selected !== "string") return "Cancelado";
+
+  const content = await readTextFile(selected);
+  const parsed = Papa.parse<any>(content, { header: true, skipEmptyLines: true });
+  const db = await Database.load("sqlite:globalfutsal.db");
+
+  const paises = await db.select<any[]>("SELECT id, nombre, confederacion_id FROM Pais");
+  const paisesMap = new Map(paises.map((p) => [normalizeString(p.nombre), p]));
+
+  // Idempotencia: (nombre normalizado + pais_id) como clave.
+  const existentes = await db.select<any[]>("SELECT nombre, pais_id FROM Competicion");
+  const clavesExistentes = new Set(
+    existentes.map((c) =>
+      normalizeString(String(c.nombre ?? "")) +
+      "|" + (c.pais_id === null || c.pais_id === undefined ? "" : String(c.pais_id)),
+    ),
+  );
+
+  let importadas = 0, omitidas = 0, errores = 0, sinPais = 0;
+  const paisesNoEncontrados = new Map<string, number>();
+
+  for (const row of parsed.data) {
+    try {
+      const nombre = String(row.nombre ?? "").trim();
+      if (!nombre) { omitidas++; continue; }
+
+      // País: normalizado → alias PT→ES → NULL contado (nunca país inventado).
+      // Una celda de país que en realidad es texto de competición ("UEFA
+      // Futsal Euro") no casará con ningún país y quedará como NULL.
+      const etiquetaPais = String(row.pais ?? "").trim();
+      const clavePais = normalizeString(etiquetaPais);
+      let paisId: number | null = null;
+      if (!clavePais) {
+        sinPais++;
+      } else {
+        const hallado = paisesMap.get(clavePais);
+        if (hallado) {
+          paisId = hallado.id;
+        } else {
+          const destino = ALIAS_PAIS[clavePais];
+          if (destino) {
+            const porAlias = paisesMap.get(normalizeString(destino));
+            if (porAlias) paisId = porAlias.id;
+          }
+        }
+        if (paisId === null) {
+          paisesNoEncontrados.set(etiquetaPais, (paisesNoEncontrados.get(etiquetaPais) ?? 0) + 1);
+        }
+      }
+
+      const clave = normalizeString(nombre) + "|" + (paisId === null ? "" : String(paisId));
+      if (clavesExistentes.has(clave)) { omitidas++; continue; }
+
+      const tipoCsv = String(row.tipo ?? "");
+      const tipo = derivarTipoCompeticion(tipoCsv);
+      const ambito = derivarAmbitoCompeticion(tipoCsv);
+
+      // Confederación: la del país (Pais.confederacion_id); las competiciones
+      // de selecciones continentales/mundiales quedan para la fase 2.
+      let confederacionId: number | null = null;
+      if (paisId !== null) {
+        const filaPais = paisesMap.get(clavePais) ?? paisesMap.get(normalizeString(ALIAS_PAIS[clavePais] ?? ""));
+        confederacionId = filaPais?.confederacion_id ? Number(filaPais.confederacion_id) : null;
+      }
+
+      await db.execute(`
+        INSERT INTO Competicion (nombre, tipo, pais_id, confederacion_id, ambito)
+        VALUES (?, ?, ?, ?, ?)
+      `, [nombre, tipo, paisId, confederacionId, ambito]);
+      clavesExistentes.add(clave);
+      importadas++;
+    } catch (e) {
+      console.error("Error importando competición:", e);
+      errores++;
+    }
+  }
+
+  let detalle = `${importadas} competiciones importadas, ${omitidas} omitidas (ya existían), ${errores} errores.`;
+  if (sinPais > 0) detalle += ` ${sinPais} sin país en el CSV (continental/mundial o dato ausente).`;
+  if (paisesNoEncontrados.size > 0) {
+    const resumen = [...paisesNoEncontrados.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([p, n]) => `${p} ×${n}`)
+      .join(", ");
+    detalle += ` PAÍSES NO ENCONTRADOS (quedaron sin país): ${resumen}`;
+  }
+  return detalle;
+}
