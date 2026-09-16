@@ -379,6 +379,19 @@ mod tests {
         ]
     }
 
+    /// Ruta del repositorio (raíz del proyecto), tanto en dev Windows como en CI Linux.
+    fn raiz_proyecto() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).parent().unwrap().to_path_buf()
+    }
+
+    /// ¿Está la raíz del proyecto dentro del HOME del usuario? En CI Linux el
+    /// checkout vive bajo /home/runner, así que los asertos negativos que
+    /// suponen "el proyecto está fuera del perfil" deben evitar ese caso.
+    fn proyecto_bajo_home() -> bool {
+        let home = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")).unwrap_or_default();
+        raiz_proyecto().starts_with(home)
+    }
+
     fn permitido_por(globs: &[PathBuf], ruta: &std::path::Path) -> bool {
         globs.iter().any(|g| coincide(&format!("{}/**", g.display()), ruta))
     }
@@ -386,27 +399,38 @@ mod tests {
     #[test]
     fn la_carpeta_configurable_extiende_el_alcance_a_futsal_data() {
         // Simula lo que hace extender_alcances: añadir el glob de la carpeta.
-        let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let proyecto = manifest.parent().unwrap();
+        let proyecto = raiz_proyecto();
         let mut globs = globs_perfil();
         globs.push(proyecto.to_path_buf());
 
-        let csv = proyecto.join("Futsal_Data/Enciclopedia_Futsal_Equipas_Masculino1.csv");
+        let csv = proyecto.join("src-tauri/tests/fixtures/equipos_fixture.csv");
         assert!(csv.exists(), "el CSV de prueba debe existir: {}", csv.display());
-        assert!(permitido_por(&globs, &csv), "el CSV de Futsal_Data debe quedar permitido tras configurar la carpeta");
-        assert!(permitido_por(&globs, &proyecto.join("Futsal_Data/sub/nuevo.csv")), "la extensión es recursiva (**)");
+        assert!(permitido_por(&globs, &csv), "el CSV de la carpeta de datos debe quedar permitido tras configurar la carpeta");
+        assert!(permitido_por(&globs, &proyecto.join("datos/sub/nuevo.csv")), "la extensión es recursiva (**)");
 
-        // Y sin extender, la carpeta del proyecto NO está permitida (solo el perfil).
-        let solo_perfil = globs_perfil();
-        assert!(!permitido_por(&solo_perfil, &csv), "sin configurar la carpeta, Futsal_Data está denegada");
+        // Sin extender, la carpeta del proyecto NO está permitida (solo el perfil)
+        // — salvo que el checkout viva dentro del HOME (CI), donde el perfil ya la cubre.
+        if !proyecto_bajo_home() {
+            let solo_perfil = globs_perfil();
+            assert!(!permitido_por(&solo_perfil, &csv), "sin configurar la carpeta, la carpeta de datos está denegada");
+        }
     }
 
     #[test]
     fn el_scope_base_sigue_denegando_lo_que_la_capability_no_cubre() {
         let globs = globs_perfil();
-        assert!(!permitido_por(&globs, std::path::Path::new("D:/secreto/datos.csv")), "otra unidad denegada");
-        assert!(!permitido_por(&globs, std::path::Path::new("C:/Windows/System32/config.sys")), "sistema denegado");
-        assert!(!permitido_por(&globs, std::path::Path::new("C:/Proyectos/otro-proyecto/datos.csv")), "otros proyectos denegados");
+        // Ruta fuera del perfil del usuario, sin atravesarlo (el helper es léxico
+        // y no resuelve `..`; Tauri canonicaliza las rutas antes de comparar).
+        let externa = if cfg!(windows) {
+            PathBuf::from(r"C:\futsal_stats_test\externo\datos.csv")
+        } else {
+            PathBuf::from("/tmp/futsal_stats_test/externo/datos.csv")
+        };
+        assert!(!permitido_por(&globs, &externa), "fuera del perfil denegada");
+        if cfg!(windows) {
+            assert!(!permitido_por(&globs, std::path::Path::new("D:/secreto/datos.csv")), "otra unidad denegada");
+            assert!(!permitido_por(&globs, std::path::Path::new("C:/Windows/System32/config.sys")), "sistema denegado");
+        }
     }
 
     #[test]
@@ -420,13 +444,11 @@ mod tests {
     }
 
     #[test]
-    fn el_csv_de_futsal_data_es_legible_y_tiene_cabecera_de_equipos() {
+    fn el_csv_de_datos_es_legible_y_tiene_cabecera_de_equipos() {
         // Extremo a extremo del lado datos: el fichero que el scope permite leer es
-        // exactamente el que el importador de equipos espera parsear.
-        let csv = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("Futsal_Data/Enciclopedia_Futsal_Equipas_Masculino1.csv");
+        // exactamente el que el importador de equipos espera parsear. Usa un fixture
+        // versionado (Futsal_Data está gitignoreada y no existe en CI).
+        let csv = raiz_proyecto().join("src-tauri/tests/fixtures/equipos_fixture.csv");
         let contenido = std::fs::read_to_string(&csv).expect("el CSV debe poder leerse del disco");
 
         let primera_linea = contenido
