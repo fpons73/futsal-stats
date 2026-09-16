@@ -29,6 +29,12 @@ estadísticas de fútbol sala: competiciones, ediciones, equipos, jugadores, ent
 - **UX consistente**: tema claro/oscuro persistido, toasts en lugar de `alert()`,
   diálogos modales con foco atrapado y confirmaciones temáticas.
 
+## Capturas de pantalla
+
+| Dashboard | Partidos | Pizarra |
+|---|---|---|
+| ![Dashboard de Global Futsal Stats](docs/screenshots/dashboard.png) | ![Lista de partidos con contexto de competición y banderas](docs/screenshots/partidos.png) | ![Pizarra táctica con las alineaciones sobre el campo](docs/screenshots/pizarra.png) |
+
 ## Stack
 
 | Capa | Tecnología |
