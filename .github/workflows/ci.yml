@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Cancela la ejecución anterior si llegan pushes seguidos a la misma rama
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend (tsc + vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Comprobación de tipos (tsc)
+        run: npx tsc --noEmit
+
+      - name: Tests unitarios (vitest)
+        run: npm test
+
+  rust:
+    name: Rust (migraciones + lib)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Dependencias del sistema (Tauri en Linux + libsqlite3)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl wget file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            libsqlite3-dev
+
+      # Aplica las migraciones 1-12 a una BD SQLite virgen con el runner real
+      # de sqlx y valida el esquema: detecta migraciones rotas antes de llegar
+      # a producción (p. ej. ALTER sobre tablas inexistentes).
+      - name: Tests de integración de migraciones
+        working-directory: src-tauri
+        run: cargo test --test migraciones
+
+      - name: Tests unitarios de la lib
+        working-directory: src-tauri
+        run: cargo test --lib
