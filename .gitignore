@@ -36,6 +36,8 @@ Futsal_Data/
 *.csv
 *.pdf
 calendario_texto.txt
+# Fixtures versionados para los tests de Rust (excepción a *.csv)
+!src-tauri/tests/fixtures/*.csv
 
 # Build artifacts
 src-tauri/target/
