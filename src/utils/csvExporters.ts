@@ -1,8 +1,13 @@
 import Database from "@tauri-apps/plugin-sql";
 import { save } from "@tauri-apps/plugin-dialog";
 import { writeTextFile } from "@tauri-apps/plugin-fs";
+import { toast } from "../components/Toast";
 
 const BOM = "\ufeff";
+
+/** Plural simple para roles ("Jugador" → "Jugadores", "Arbitro" → "Arbitros"). */
+const pluralizar = (palabra: string) =>
+  /[aeiouáéíóú]$/.test(palabra) ? `${palabra}s` : `${palabra}es`;
 
 const escapeCSV = (v: any) => {
   if (v === null || v === undefined) return "";
@@ -11,6 +16,29 @@ const escapeCSV = (v: any) => {
     ? `"${s.replace(/"/g, '""')}"`
     : s;
 };
+
+/** Pide destino con el diálogo nativo, escribe el CSV y avisa por toast.
+ *  Devuelve true si se escribió, false si el usuario canceló o falló la escritura
+ *  (los fallos de consulta deben gestionarse antes de llamar aquí). */
+async function guardarCSV(csv: string, nombreArchivo: string): Promise<boolean> {
+  try {
+    const ruta = await save({
+      filters: [{ name: "CSV", extensions: ["csv"] }],
+      defaultPath: nombreArchivo,
+    });
+    if (!ruta) {
+      toast.info("Exportación cancelada.");
+      return false;
+    }
+    await writeTextFile(ruta, csv);
+    toast.success(`CSV exportado: ${nombreArchivo}`);
+    return true;
+  } catch (e) {
+    console.error("Error exportando CSV:", e);
+    toast.error("No se pudo exportar el CSV. Revisa la carpeta destino y los permisos.");
+    return false;
+  }
+}
 
 export async function exportarPersonasCSV(rol: string) {
   try {
@@ -31,11 +59,10 @@ export async function exportarPersonasCSV(rol: string) {
       `${escapeCSV(p.nombre)},${escapeCSV(p.apellidos)},${escapeCSV(p.nombre_deportivo)},${escapeCSV(p.fecha_nacimiento)},${escapeCSV(p.primera_nacionalidad)},${escapeCSV(p.posicion_principal)},${escapeCSV(p.posiciones_secundarias)},${escapeCSV(p.foto_path)}`
     ).join("\n");
 
-    const csv = BOM + cabecera + filas;
-    const ruta = await save({ filters: [{ name: "CSV", extensions: ["csv"] }], defaultPath: `${rol.toLowerCase()}s_export.csv` });
-    if (ruta) await writeTextFile(ruta, csv);
+    await guardarCSV(BOM + cabecera + filas, `${pluralizar(rol).toLowerCase()}_export.csv`);
   } catch (e) {
     console.error("Error exportando CSV:", e);
+    toast.error(`No se pudo generar el CSV de ${pluralizar(rol).toLowerCase()} (error de base de datos).`);
   }
 }
 
@@ -54,11 +81,10 @@ export async function exportarEquiposCSV() {
       `${escapeCSV(e.nombre)},${escapeCSV(e.abreviatura)},${escapeCSV(e.categoria)},${escapeCSV(e.color1)},${escapeCSV(e.color2)},${escapeCSV(e.pais)}`
     ).join("\n");
 
-    const csv = BOM + cabecera + filas;
-    const ruta = await save({ filters: [{ name: "CSV", extensions: ["csv"] }], defaultPath: "equipos_export.csv" });
-    if (ruta) await writeTextFile(ruta, csv);
+    await guardarCSV(BOM + cabecera + filas, "equipos_export.csv");
   } catch (e) {
     console.error("Error exportando equipos CSV:", e);
+    toast.error("No se pudo generar el CSV de equipos (error de base de datos).");
   }
 }
 
@@ -68,9 +94,7 @@ export async function exportarClasificacionCSV(clasificacion: any[], nombreEdici
     `${c.posicion},${escapeCSV(c.nombre)},${c.puntos},${c.pj},${c.pg},${c.pe},${c.pp},${c.gf},${c.gc},${c.dg}`
   ).join("\n");
 
-  const csv = BOM + cabecera + filas;
-  const ruta = await save({ filters: [{ name: "CSV", extensions: ["csv"] }], defaultPath: `clasificacion_${nombreEdicion}.csv` });
-  if (ruta) await writeTextFile(ruta, csv);
+  await guardarCSV(BOM + cabecera + filas, `clasificacion_${nombreEdicion}.csv`);
 }
 
 export async function exportarEstadisticasJugadorCSV(estadisticas: any[], nombreEdicion: string) {
@@ -79,7 +103,5 @@ export async function exportarEstadisticasJugadorCSV(estadisticas: any[], nombre
   const cabecera = keys.join(",") + "\n";
   const filas = estadisticas.map(j => keys.map(k => escapeCSV(j[k])).join(",")).join("\n");
 
-  const csv = BOM + cabecera + filas;
-  const ruta = await save({ filters: [{ name: "CSV", extensions: ["csv"] }], defaultPath: `stats_jugadores_${nombreEdicion}.csv` });
-  if (ruta) await writeTextFile(ruta, csv);
+  await guardarCSV(BOM + cabecera + filas, `stats_jugadores_${nombreEdicion}.csv`);
 }

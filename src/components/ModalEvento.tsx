@@ -1,9 +1,12 @@
-import { useState, useEffect } from "react";
-import { X, Save, Timer, Target } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { Save, Timer, Target } from "lucide-react";
 import { IoFootball, IoSwapHorizontal } from "react-icons/io5";
 import { FaBandage, FaBan } from "react-icons/fa6";
 import { MdMonitor } from "react-icons/md";
 import Database from "@tauri-apps/plugin-sql";
+import { toast } from "./Toast";
+import { useFormGuard } from "../hooks/useFormGuard";
+import Modal from "./Modal";
 
 interface ModalProps {
   isOpen: boolean;
@@ -14,6 +17,9 @@ interface ModalProps {
   visitanteId: number;
   eventoAEditar?: any;
   defaultTipoEvento?: string;
+  /** Cerrar al hacer clic en el fondo (pasando por la guarda). Por defecto false:
+      se usa en vivo y un clic perdido a mitad de edición no debe interrumpir. */
+  cerrarAlClicarFuera?: boolean;
 }
 
 const TIPOS_GOL = ["Pie Derecho", "Pie Izquierdo", "Cabeza", "Volea", "Rebote", "Doble Penalti", "Falta Directa", "Penalti", "Propia Puerta", "Olímpico", "Chilena"];
@@ -23,7 +29,7 @@ const TIPOS_TARJETA = ["Amarilla", "2ª Amarilla", "Roja", "Azul"];
 const TIPOS_CAMBIO = ["Táctico", "Lesión", "Conmoción"];
 const ZONAS_GOL = ["Área de 6m", "Fuera del área (10m)", "Lejos del arco"];
 
-export function ModalEvento({ isOpen, onClose, onSave, partido, localId, visitanteId, eventoAEditar, defaultTipoEvento }: ModalProps) {
+export function ModalEvento({ isOpen, onClose, onSave, partido, localId, visitanteId, eventoAEditar, defaultTipoEvento, cerrarAlClicarFuera = false }: ModalProps) {
   const [tipoEvento, setTipoEvento] = useState(defaultTipoEvento || "GOL");
   const [minuto, setMinuto] = useState(1);
   const [equipoId, setEquipoId] = useState(localId);
@@ -33,6 +39,13 @@ export function ModalEvento({ isOpen, onClose, onSave, partido, localId, visitan
   const [subtipo, setSubtipo] = useState("");
   const [extraInfo, setExtraInfo] = useState("");
   const [zonaGol, setZonaGol] = useState("Área de 6m");
+
+  // --- GUARDA DE CAMBIOS SIN GUARDAR (consistente con el resto de editores) ---
+  // Escape/X/Cancelar pasan por la guarda: limpio cierra directo, sucio pregunta.
+  const { iniciar, cerrarSeguro, dialogo: dialogoGuarda } = useFormGuard();
+  const valoresEvento = () => ({
+    tipoEvento, minuto, equipoId, protagonistaId, secundarioId, subtipo, extraInfo, zonaGol,
+  });
 
   useEffect(() => {
     if (isOpen && partido?.id && equipoId) cargarJugadores();
@@ -47,6 +60,18 @@ export function ModalEvento({ isOpen, onClose, onSave, partido, localId, visitan
       setSecundarioId(eventoAEditar.asistente_id || 0);
       setSubtipo(eventoAEditar.subtipo || "");
       setExtraInfo(eventoAEditar.descripcion || "");
+      // Instantánea base = exactamente los valores que acabamos de poner
+      // (zonaGol y equipoId del nuevo evento NO se resetean: se congelan como están).
+      iniciar({
+        tipoEvento: eventoAEditar.tipo || "GOL",
+        minuto: eventoAEditar.minuto || 1,
+        equipoId: eventoAEditar.equipo_id || localId,
+        protagonistaId: eventoAEditar.jugador_id || 0,
+        secundarioId: eventoAEditar.asistente_id || 0,
+        subtipo: eventoAEditar.subtipo || "",
+        extraInfo: eventoAEditar.descripcion || "",
+        zonaGol,
+      });
     } else {
       setTipoEvento(defaultTipoEvento || "GOL");
       setMinuto(1);
@@ -54,13 +79,24 @@ export function ModalEvento({ isOpen, onClose, onSave, partido, localId, visitan
       setSecundarioId(0);
       setSubtipo("");
       setExtraInfo("");
+      iniciar({
+        tipoEvento: defaultTipoEvento || "GOL",
+        minuto: 1,
+        equipoId,
+        protagonistaId: 0,
+        secundarioId: 0,
+        subtipo: "",
+        extraInfo: "",
+        zonaGol,
+      });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [eventoAEditar, defaultTipoEvento, isOpen]);
 
   async function cargarJugadores() {
     const db = await Database.load("sqlite:globalfutsal.db");
     const res = await db.select<any[]>(`
-      SELECT a.persona_id, a.dorsal, a.titular, a.posicion as posicion_partido,
+      SELECT a.persona_id, a.dorsal, a.titular, COALESCE(a.posicion_inicial, a.posicion) as posicion_partido,
              p.nombre_deportivo, p.foto_path, p.roles
       FROM Alineacion a
       JOIN Persona p ON a.persona_id = p.id
@@ -71,50 +107,91 @@ export function ModalEvento({ isOpen, onClose, onSave, partido, localId, visitan
     setJugadores(res);
   }
 
-  const guardar = async () => {
-    const db = await Database.load("sqlite:globalfutsal.db");
-    let tipo = tipoEvento;
-    let metadata: any = {};
+  const guardar = async (): Promise<boolean> => {
+    try {
+      const db = await Database.load("sqlite:globalfutsal.db");
+      let tipo = tipoEvento;
+      let metadata: any = {};
 
-    if (tipoEvento === "GOL" && subtipo === "Doble Penalti") tipo = "GOL_DOBLE_PENALTI";
-    if (tipoEvento === "GOL" && subtipo === "Penalti") tipo = "GOL_PENALTI";
-    if (tipoEvento === "GOL" && subtipo === "Falta Directa") tipo = "GOL_FALTA";
-    if (tipoEvento === "GOL" && subtipo === "Propia Puerta") tipo = "PROPIA_PUERTA";
+      if (tipoEvento === "GOL" && subtipo === "Doble Penalti") tipo = "GOL_DOBLE_PENALTI";
+      if (tipoEvento === "GOL" && subtipo === "Penalti") tipo = "GOL_PENALTI";
+      if (tipoEvento === "GOL" && subtipo === "Falta Directa") tipo = "GOL_FALTA";
+      if (tipoEvento === "GOL" && subtipo === "Propia Puerta") tipo = "PROPIA_PUERTA";
 
-    if (zonaGol) metadata.zona = zonaGol;
-    if (extraInfo) metadata.info = extraInfo;
+      if (zonaGol) metadata.zona = zonaGol;
+      if (extraInfo) metadata.info = extraInfo;
 
-    const metadataStr = Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null;
+      const metadataStr = Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : null;
 
-    if (eventoAEditar) {
-      await db.execute(`
-        UPDATE Evento SET tipo = ?, subtipo = ?, minuto = ?, jugador_id = ?, asistente_id = ?, equipo_id = ?, descripcion = ?, metadata = ?
-        WHERE id = ?
-      `, [tipo, subtipo || null, minuto, protagonistaId || null, secundarioId || null, equipoId, extraInfo || null, metadataStr, eventoAEditar.id]);
-    } else {
-      await db.execute(`
-        INSERT INTO Evento (partido_id, tipo, subtipo, minuto, jugador_id, asistente_id, equipo_id, descripcion, metadata)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `, [partido.id, tipo, subtipo || null, minuto, protagonistaId || null, secundarioId || null, equipoId, extraInfo || null, metadataStr]);
+      if (eventoAEditar) {
+        await db.execute(`
+          UPDATE Evento SET tipo = ?, subtipo = ?, minuto = ?, jugador_id = ?, asistente_id = ?, equipo_id = ?, descripcion = ?, metadata = ?
+          WHERE id = ?
+        `, [tipo, subtipo || null, minuto, protagonistaId || null, secundarioId || null, equipoId, extraInfo || null, metadataStr, eventoAEditar.id]);
+      } else {
+        await db.execute(`
+          INSERT INTO Evento (partido_id, tipo, subtipo, minuto, jugador_id, asistente_id, equipo_id, descripcion, metadata)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, [partido.id, tipo, subtipo || null, minuto, protagonistaId || null, secundarioId || null, equipoId, extraInfo || null, metadataStr]);
+      }
+
+      onSave();
+      return true;
+    } catch (e) {
+      console.error(e);
+      toast.error("No se pudo guardar el evento");
+      return false;
     }
-
-    onSave();
-    onClose();
   };
+
+  // Guardado explícito (Enter / botón Guardar): guarda y cierra solo si triunfó.
+  const guardarYCerrar = async () => {
+    if (await guardar()) onClose();
+  };
+
+  // Intento de cierre (Escape / X / Cancelar): pasa por la guarda de cambios.
+  const intentarCerrar = async () => {
+    if (await cerrarSeguro(valoresEvento(), guardar)) onClose();
+  };
+
+  // Los listeners de window deben invocar siempre las closures del último render.
+  const intentarCerrarRef = useRef(intentarCerrar);
+  const guardarYCerrarRef = useRef(guardarYCerrar);
+  useEffect(() => {
+    intentarCerrarRef.current = intentarCerrar;
+    guardarYCerrarRef.current = guardarYCerrar;
+  });
 
   if (!isOpen) return null;
 
+  // Se compone sobre el Modal base: foco, pila de overlays, Escape y clic en el
+  // fondo viven en un solo sitio. Escape/X/Cancelar pasan por la guarda (onClose);
+  // Enter guarda y cierra, salvo en multilínea o al pulsar Shift. La guarda se
+  // renderiza como hermana del Modal: dentro del panel quedaría bajo su transform
+  // (animate-in) y el ConfirmDialog, que es position:fixed, se rompería.
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[60] backdrop-blur-sm p-4">
-      <div className="bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-xl w-full max-w-lg p-5 shadow-2xl flex flex-col max-h-[85vh] transition-colors">
-        <div className="flex justify-between items-center mb-4 border-b border-gray-200 dark:border-gray-800 pb-3">
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            {eventoAEditar ? "Editar Evento" : "Nuevo Evento"}
-          </h2>
-          <button onClick={onClose}><X className="text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors" /></button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto space-y-3 pr-1">
+    <>
+      <Modal
+        isOpen
+        onClose={intentarCerrar}
+        title={eventoAEditar ? "Editar Evento" : "Nuevo Evento"}
+        cerrarAlClicarFuera={cerrarAlClicarFuera}
+        ancho="max-w-lg"
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || e.shiftKey) return;
+          const tag = (e.target as HTMLElement | null)?.tagName;
+          if (tag === "TEXTAREA" || tag === "SELECT") return;
+          e.preventDefault();
+          guardarYCerrarRef.current();
+        }}
+        footer={
+          <>
+            <button onClick={intentarCerrar} className="flex-1 px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
+            <button onClick={guardarYCerrar} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 transition-colors flex items-center justify-center gap-2" title="Guardar (Enter)"><Save size={16} /> Guardar</button>
+          </>
+        }
+      >
+        <div className="space-y-3">
           {/* Tipo de evento */}
           <div>
             <label className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase">Tipo</label>
@@ -279,12 +356,9 @@ export function ModalEvento({ isOpen, onClose, onSave, partido, localId, visitan
             />
           </div>
         </div>
-
-        <div className="flex gap-2 pt-3 border-t border-gray-200 dark:border-gray-800 mt-3">
-          <button onClick={onClose} className="flex-1 px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 font-bold hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors">Cancelar</button>
-          <button onClick={guardar} className="flex-1 px-4 py-2 rounded-lg bg-blue-600 text-white font-bold hover:bg-blue-500 transition-colors flex items-center justify-center gap-2"><Save size={16} /> Guardar</button>
-        </div>
-      </div>
-    </div>
+      </Modal>
+      {/* Diálogo de la guarda de cambios sin guardar */}
+      {dialogoGuarda}
+    </>
   );
 }

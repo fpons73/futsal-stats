@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Users, Plus, X, Search, ChevronRight, Shield, Edit } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
 import ImagenLocal from "../components/ImagenLocal"; // Usamos el componente arreglado
+import { useFormGuard } from "../hooks/useFormGuard";
 
 interface SelectorData { id: number; nombre: string; }
 interface Pais { id: number; nombre: string; }
@@ -46,6 +48,9 @@ export default function InscripcionEquipos() {
         color1: "#1F2E5C",
         color2: "#FFFFFF"
     });
+
+    // --- CAMBIOS SIN GUARDAR (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
 
     useEffect(() => { cargarTemporadas(); cargarPaises(); }, []);
 
@@ -137,13 +142,15 @@ export default function InscripcionEquipos() {
     // --- ACCIONES CRUD EQUIPO ---
     function abrirCrear() {
         setEditingId(null);
-        setForm({ nombre: "", abreviatura: "", categoria: "Club", pais_id: "", escudo: null, color1: "#1F2E5C", color2: "#FFFFFF" });
+        const inicial = { nombre: "", abreviatura: "", categoria: "Club", pais_id: "", escudo: null, color1: "#1F2E5C", color2: "#FFFFFF" };
+        setForm(inicial);
+        iniciar(inicial);
         setIsModalOpen(true);
     }
 
     function abrirEditar(e: Equipo) {
         setEditingId(e.id);
-        setForm({
+        const inicial = {
             nombre: e.nombre,
             abreviatura: e.abreviatura || "",
             categoria: e.categoria,
@@ -151,7 +158,9 @@ export default function InscripcionEquipos() {
             escudo: e.escudo_path,
             color1: e.color1 || "#1F2E5C",
             color2: e.color2 || "#FFFFFF"
-        });
+        };
+        setForm(inicial);
+        iniciar(inicial);
         setIsModalOpen(true);
     }
 
@@ -165,8 +174,8 @@ export default function InscripcionEquipos() {
         } catch (err) { console.error(err); }
     }
 
-    async function guardarEquipo() {
-        if (!form.nombre) return alert("Nombre obligatorio");
+    async function guardarEquipo(): Promise<boolean> {
+        if (!form.nombre) { toast.warning("Nombre obligatorio"); return false; }
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             const paisId = form.pais_id ? parseInt(form.pais_id) : null;
@@ -184,8 +193,18 @@ export default function InscripcionEquipos() {
             }
             setIsModalOpen(false);
             if (selEdicion) cargarListas(selEdicion); // Recargar listas
-        } catch (e) { console.error(e); }
+            return true;
+        } catch (e) {
+            console.error(e);
+            toast.error("Error al guardar el equipo");
+            return false;
+        }
     }
+
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro(form, guardarEquipo)) setIsModalOpen(false);
+    };
 
     const disponiblesFiltrados = disponibles.filter(e => e.nombre.toLowerCase().includes(busqueda.toLowerCase()));
 
@@ -273,7 +292,7 @@ export default function InscripcionEquipos() {
             </div>
 
             {/* MODAL CREAR/EDITAR EQUIPO */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Equipo" : "Nuevo Equipo"}>
+            <Modal isOpen={isModalOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Equipo" : "Nuevo Equipo"}>
                 <div className="space-y-4 text-white">
                     <div className="flex justify-center mb-4">
                         <div onClick={seleccionarEscudo} className="w-20 h-20 rounded-2xl border-2 border-dashed border-white/10 hover:border-orange cursor-pointer flex items-center justify-center bg-white overflow-hidden relative group shadow-md">
@@ -305,12 +324,14 @@ export default function InscripcionEquipos() {
                         </div>
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setIsModalOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
                         <button onClick={guardarEquipo} className="bg-gradient-to-r from-orange to-orange-neon text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange">Guardar</button>
                     </div>
                 </div>
             </Modal>
 
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
         </div>
     );
 }

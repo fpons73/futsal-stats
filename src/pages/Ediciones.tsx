@@ -1,9 +1,13 @@
 import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { ask } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core"; // <--- CLAVE
 import { Plus, Layers, Trash2, Edit, Save, Trophy } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
+import { UndoToast } from "../components/UndoToast";
+import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useFormGuard } from "../hooks/useFormGuard";
 // Ya no usamos ImagenLocal
 
 interface EdicionDisplay {
@@ -39,6 +43,13 @@ export default function Ediciones() {
     const [ptsDerrota, setPtsDerrota] = useState(0);
     const [nombreEdicion, setNombreEdicion] = useState("");
 
+    // --- CAMBIOS SIN GUARDAR (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+    // Confirmación temática para acciones destructivas (sustituye a ask() nativo).
+    const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+    // Borrado con deshacer: instantánea antes del DELETE, re-INSERT al deshacer.
+    const { pendiente: filaBorrada, borrar: borrarFila, deshacer, clear: limpiarBorrado } = useBorradorConDeshacer("Edicion", cargarDatos);
+
     useEffect(() => { cargarDatos(); }, []);
 
     async function cargarDatos() {
@@ -67,6 +78,7 @@ export default function Ediciones() {
         setEditingId(null);
         setSelCompeticion(""); setSelTemporada(""); setPtsVictoria(3); setPtsEmpate(1); setPtsDerrota(0);
         setNombreEdicion("");
+        iniciar({ selCompeticion: "", selTemporada: "", ptsVictoria: 3, ptsEmpate: 1, ptsDerrota: 0, nombreEdicion: "" });
         setIsModalOpen(true);
     }
 
@@ -76,13 +88,14 @@ export default function Ediciones() {
         setSelTemporada(e.temporada_id.toString());
         setPtsVictoria(e.puntos_victoria); setPtsEmpate(e.puntos_empate); setPtsDerrota(e.puntos_derrota);
         setNombreEdicion(e.nombre || "");
+        iniciar({ selCompeticion: e.competicion_id.toString(), selTemporada: e.temporada_id.toString(), ptsVictoria: e.puntos_victoria, ptsEmpate: e.puntos_empate, ptsDerrota: e.puntos_derrota, nombreEdicion: e.nombre || "" });
         setIsModalOpen(true);
     }
 
-    async function guardar() {
+    async function guardar(): Promise<boolean> {
         if (!selCompeticion || !selTemporada) {
-            alert("Selecciona Competición y Temporada");
-            return;
+            toast.warning("Selecciona Competición y Temporada");
+            return false;
         }
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -100,16 +113,22 @@ export default function Ediciones() {
             }
             setIsModalOpen(false);
             cargarDatos();
-        } catch (error) { console.error(error); }
+            return true;
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al guardar la edición");
+            return false;
+        }
+    }
+
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro({ selCompeticion, selTemporada, ptsVictoria, ptsEmpate, ptsDerrota, nombreEdicion }, guardar)) setIsModalOpen(false);
     }
 
     async function borrar(id: number) {
-        const confirm = await ask("¿Eliminar esta edición?", { title: "Eliminar", kind: "warning", okLabel: "Sí", cancelLabel: "Cancelar" });
-        if (confirm) {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            await db.execute("DELETE FROM Edicion WHERE id = $1", [id]);
-            cargarDatos();
-        }
+        const confirm = await confirmar({ mensaje: "¿Eliminar esta edición?", titulo: "Eliminar", textoConfirmar: "Sí", textoCancelar: "Cancelar", peligroso: true });
+        if (confirm) await borrarFila(id);
     }
 
     return (
@@ -159,7 +178,7 @@ export default function Ediciones() {
             </div>
 
             {/* MODAL */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Edición" : "Nueva Edición"}>
+            <Modal isOpen={isModalOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Edición" : "Nueva Edición"}>
                 <div className="space-y-5">
                     <div className="grid grid-cols-1 gap-4">
                         <div>
@@ -197,11 +216,22 @@ export default function Ediciones() {
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5 mt-4">
-                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
                         <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">{editingId ? "Guardar Cambios" : "Crear Edición"}</button>
                     </div>
                 </div>
             </Modal>
+
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
+            {/* Diálogo de confirmación destructiva */}
+            {dialogoConfirmar}
+            <UndoToast
+                pendiente={filaBorrada}
+                onUndo={deshacer}
+                onDescartar={limpiarBorrado}
+                mensaje={(f) => `Edición ${f.nombre || f.competicion_nombre || f.id} eliminada`}
+            />
         </div>
     );
 }

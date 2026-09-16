@@ -4,6 +4,44 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ====== VARIABLES DE TEMA ======
+/* navy/silver se resuelven vía variables CSS, de modo que TODA la app (bg-navy,
+   text-silver, bg-navy/40...) invierta sus roles al pasar a tema claro manteniendo
+   la opacidad de cada uso. En claro, "navy" pasa a superficie clara y "silver" a
+   texto oscuro. Los blancos translúcidos (bg-white/5, border-white/10, text-white)
+   se remapean globalmente más abajo. */
+:root {
+  --c-navy: 11 31 59;          /* #0B1F3B */
+  --c-navy-light: 22 41 74;    /* #16294a */
+  --c-navy-dark: 5 15 30;      /* #050f1e */
+  --c-silver: 201 206 214;     /* #C9CED6 */
+  --c-silver-dim: 156 163 175; /* #9ca3af */
+  --c-accent-blue: 0 210 255;  /* #00D2FF */
+  --c-accent-green: 0 242 254; /* #00F2FE */
+  --c-orange: 242 140 40;      /* #F28C28 */
+  --c-orange-hover: 217 123 31;/* #d97b1f */
+  --c-orange-neon: 255 159 67; /* #FF9F43 */
+  --c-red: 224 75 63;          /* #E04B3F */
+  --c-success: 46 204 113;     /* #2ECC71 */
+  --c-warning: 241 196 15;     /* #F1C40F */
+}
+
+html.light {
+  --c-navy: 239 243 249;       /* #EFF3F9 - superficies claras */
+  --c-navy-light: 226 233 243; /* #E2E9F3 */
+  --c-navy-dark: 214 223 235;  /* #D6DFEB */
+  --c-silver: 30 41 59;        /* #1E293B - texto oscuro */
+  --c-silver-dim: 71 85 105;   /* #475569 */
+  --c-accent-blue: 2 119 189;  /* #0077BD - cian legible sobre claro */
+  --c-accent-green: 13 148 136;/* #0D9488 */
+  --c-orange: 194 84 12;       /* #C2540C - ámbar oscuro legible */
+  --c-orange-hover: 168 72 8;  /* #A84808 */
+  --c-orange-neon: 202 106 0;  /* #CA6A00 */
+  --c-red: 185 28 28;          /* #B91C1C */
+  --c-success: 21 128 61;      /* #15803D */
+  --c-warning: 180 83 9;       /* #B45309 */
+}
+
 /* Estilos globales base con degradado premium */
 body {
   background: radial-gradient(circle at top left, #0D1E36 0%, #06101E 100%);
@@ -11,6 +49,85 @@ body {
   font-family: 'Inter', sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
+}
+
+/* ====== TEMA CLARO ======
+/* html.light activa el tema claro (darkMode: 'class' en Tailwind). */
+html.light body {
+  background: radial-gradient(circle at top left, #F4F6FA 0%, #E2E8F0 100%);
+  color: #1E293B;
+}
+
+/* ====== REMAPEO GLOBAL DE BLANCOS TRANSLÚCIDOS (tema claro) ======
+/* Las páginas usan bg-white/5, border-white/10, text-white... como superficie/texto
+   sobre fondo oscuro. En claro serían invisibles, así que se invierten a tonos de
+   tinta oscura equivalentes. Se limita a <main> para no tocar la pista tostada,
+   escudos sobre fondo blanco ni elementos blancos intencionales (modales claros). */html.light :is(main, aside) [class*="bg-white/"] {
+  background-color: rgba(15, 23, 42, 0.05) !important;
+}
+html.light :is(main, aside) [class*="border-white/"] {
+  border-color: rgba(15, 23, 42, 0.1) !important;
+}
+html.light :is(main, aside) [class*="hover\:bg-white"]:hover {
+  background-color: rgba(15, 23, 42, 0.08) !important;
+}
+html.light :is(main, aside) [class*="text-white"] {
+  color: #1E293B !important;
+}
+html.light :is(main, aside) [class*="hover\:text-white"]:hover {
+  color: #0B1F3B !important;
+}
+
+/* Excepciones: texto blanco sobre superficies realmente oscuras se mantiene blanco
+   (chips de jugadores en la pista, tooltips, chips del árbitro...). */
+html.light :is(main, aside) [class*="bg-black/"][class*="text-white"],
+html.light :is(main, aside) [class*="bg-gray-950"][class*="text-white"],
+html.light :is(main, aside) [class*="bg-gray-900"][class*="text-white"] {
+  color: #FFFFFF !important;
+}
+
+/* ====== CASOS ESPECÍFICOS DEL TEMA CLARO ======
+/* Placas blancas de escudos: el fondo permanece blanco (los escudos PNG son
+   transparentes y necesitan fondo claro); su borde sí se remapea. */
+html.light main .bg-white {
+  background-color: #FFFFFF !important;
+}
+
+/* Opciones de <select>: los navegadores las pintan con el color del propio option;
+   sin esto saldrían blancas sobre blanco en claro. */
+html.light select option {
+  background-color: #FFFFFF;
+  color: #1E293B;
+}
+html:not(.light) select option {
+  background-color: #0B1F3B;
+  color: #FFFFFF;
+}
+
+/* Tablas: encabezados y filas con superficie coherente en claro. */
+html.light main thead {
+  background-color: rgba(15, 23, 42, 0.04);
+}
+html.light main tbody tr:nth-child(even) {
+  background-color: rgba(15, 23, 42, 0.02);
+}
+
+/* Vidrio templado adaptado a claro */
+html.light .glass-panel {
+  background: rgba(255, 255, 255, 0.78);
+  border-color: rgba(15, 23, 42, 0.08);
+  box-shadow: 0 8px 32px 0 rgba(15, 23, 42, 0.08);
+}
+html.light .glass-panel-hover:hover {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+/* Scrollbars acordes al tema */
+html.light ::-webkit-scrollbar-track {
+  background: rgba(15, 23, 42, 0.06);
+}
+html.light ::-webkit-scrollbar-thumb {
+  background: rgba(242, 140, 40, 0.5);
 }
 
 /* Utilidades Premium de Cristal Templado (Glassmorphism) */

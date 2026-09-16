@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { Database as DbIcon, Download, CheckCircle, AlertCircle, Upload, Calendar } from "lucide-react";
 import Database from "@tauri-apps/plugin-sql";
-import { message } from "@tauri-apps/plugin-dialog";
+import { toast } from "../components/Toast";
 import { useEdicion } from "../context/EdicionContext";
 import { importarCalendarioCSV, importarCalendarioTexto } from "../utils/importadorCalendario";
 import { importarEquiposCSV, importarJugadoresCSV } from "../utils/importadorMasivo";
 import { generarRoundRobin, asignarPabellones, asignarFechas } from "../utils/generadorCalendario";
 import { seedConfederacionesFutsal } from "../utils/seedConfederaciones";
 import { seedCompeticionesFutsal } from "../utils/seedCompeticionesFutsal";
+import { avisarSiRutaDenegada } from "../utils/carpetaDatos";
 
 export default function Importar() {
   const { edicionActiva, refrescar } = useEdicion();
@@ -21,10 +22,10 @@ export default function Importar() {
     try {
       const res = await importarCalendarioCSV(edicionActiva.id);
       setResultado(res);
-      await message(res, { title: "Importación", kind: "info" });
+      toast.info(res);
       refrescar();
     } catch (e) {
-      setError(String(e));
+      if (!avisarSiRutaDenegada(e)) setError(String(e));
     } finally { setCargando(false); }
   };
 
@@ -34,10 +35,10 @@ export default function Importar() {
     try {
       const res = await importarCalendarioTexto(edicionActiva.id);
       setResultado(res);
-      await message(res, { title: "Importación", kind: "info" });
+      toast.info(res);
       refrescar();
     } catch (e) {
-      setError(String(e));
+      if (!avisarSiRutaDenegada(e)) setError(String(e));
     } finally { setCargando(false); }
   };
 
@@ -46,9 +47,9 @@ export default function Importar() {
     try {
       const res = await importarEquiposCSV();
       setResultado(res);
-      await message(res, { title: "Importación", kind: "info" });
+      toast.info(res);
     } catch (e) {
-      setError(String(e));
+      if (!avisarSiRutaDenegada(e)) setError(String(e));
     } finally { setCargando(false); }
   };
 
@@ -57,9 +58,9 @@ export default function Importar() {
     try {
       const res = await importarJugadoresCSV();
       setResultado(res);
-      await message(res, { title: "Importación", kind: "info" });
+      toast.info(res);
     } catch (e) {
-      setError(String(e));
+      if (!avisarSiRutaDenegada(e)) setError(String(e));
     } finally { setCargando(false); }
   };
 
@@ -69,7 +70,7 @@ export default function Importar() {
       await seedConfederacionesFutsal();
       await seedCompeticionesFutsal();
       setResultado("Seeds de futsal cargados correctamente.");
-      await message("Seeds cargados.", { title: "Éxito", kind: "info" });
+      toast.success("Seeds cargados.");
       refrescar();
     } catch (e) {
       setError(String(e));
@@ -112,7 +113,7 @@ export default function Importar() {
         }
       }
       setResultado(`Calendario generado: ${importados} partidos`);
-      await message(`Calendario generado: ${importados} partidos`, { title: "Éxito", kind: "info" });
+      toast.success(`Calendario generado: ${importados} partidos`);
       refrescar();
     } catch (e) {
       setError(String(e));

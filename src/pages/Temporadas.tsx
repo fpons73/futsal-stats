@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { ask } from "@tauri-apps/plugin-dialog";
 import { Plus, Calendar, Trash2, Edit, CalendarRange } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
+import { UndoToast } from "../components/UndoToast";
+import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useFormGuard } from "../hooks/useFormGuard";
 
 interface Temporada {
     id: number;
@@ -20,6 +24,13 @@ export default function Temporadas() {
     const [nombre, setNombre] = useState("");
     const [fechaInicio, setFechaInicio] = useState("");
     const [fechaFin, setFechaFin] = useState("");
+
+    // --- CAMBIOS SIN GUARDAR (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+    // Confirmación temática para acciones destructivas (sustituye a ask() nativo).
+    const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+    // Borrado con deshacer: instantánea antes del DELETE, re-INSERT al deshacer.
+    const { pendiente: filaBorrada, borrar: borrarFila, deshacer, clear: limpiarBorrado } = useBorradorConDeshacer("Temporada", cargarDatos);
 
     useEffect(() => {
         cargarDatos();
@@ -44,6 +55,7 @@ export default function Temporadas() {
         const hoy = new Date().toISOString().split('T')[0];
         setFechaInicio(hoy);
         setFechaFin(hoy);
+        iniciar({ nombre: "", fechaInicio: hoy, fechaFin: hoy });
         setIsModalOpen(true);
     }
 
@@ -52,13 +64,14 @@ export default function Temporadas() {
         setNombre(t.nombre);
         setFechaInicio(t.fecha_inicio);
         setFechaFin(t.fecha_fin);
+        iniciar({ nombre: t.nombre, fechaInicio: t.fecha_inicio, fechaFin: t.fecha_fin });
         setIsModalOpen(true);
     }
 
-    async function guardar() {
+    async function guardar(): Promise<boolean> {
         if (!nombre || !fechaInicio || !fechaFin) {
-            alert("Por favor completa todos los campos.");
-            return;
+            toast.warning("Por favor completa todos los campos.");
+            return false;
         }
 
         try {
@@ -77,30 +90,29 @@ export default function Temporadas() {
             }
             cerrarModal();
             cargarDatos();
+            return true;
         } catch (error) {
             console.error("Error guardando:", error);
+            toast.error("Error al guardar la temporada");
+            return false;
         }
     }
 
     async function borrar(id: number) {
-        const confirm = await ask("¿Eliminar esta temporada? Cuidado, si hay partidos asociados podrían quedar huérfanos.", {
-            title: "Eliminar Temporada",
-            kind: "warning",
-            okLabel: "Eliminar",
-            cancelLabel: "Cancelar"
-        });
+        const confirm = await confirmar({ mensaje: "¿Eliminar esta temporada? Cuidado, si hay partidos asociados podrían quedar huérfanos.", titulo: "Eliminar Temporada", textoConfirmar: "Eliminar", textoCancelar: "Cancelar", peligroso: true });
 
-        if (confirm) {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            await db.execute("DELETE FROM Temporada WHERE id = $1", [id]);
-            cargarDatos();
-        }
+        if (confirm) await borrarFila(id);
     }
 
     function cerrarModal() {
         setIsModalOpen(false);
         setEditingId(null);
     }
+
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro({ nombre, fechaInicio, fechaFin }, guardar)) cerrarModal();
+    };
 
     return (
         <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
@@ -154,7 +166,7 @@ export default function Temporadas() {
             </div>
 
             {/* MODAL */}
-            <Modal isOpen={isModalOpen} onClose={cerrarModal} title={editingId ? "Editar Temporada" : "Nueva Temporada"}>
+            <Modal isOpen={isModalOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Temporada" : "Nueva Temporada"}>
                 <div className="space-y-4">
                     <div>
                         <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre Temporada</label>
@@ -189,12 +201,22 @@ export default function Temporadas() {
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5 mt-4">
-                        <button onClick={cerrarModal} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
                         <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>
 
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
+            {/* Diálogo de confirmación destructiva */}
+            {dialogoConfirmar}
+            <UndoToast
+                pendiente={filaBorrada}
+                onUndo={deshacer}
+                onDescartar={limpiarBorrado}
+                mensaje={(f) => `Temporada ${f.nombre} eliminada`}
+            />
         </div>
     );
 }

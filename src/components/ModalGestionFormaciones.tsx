@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
 import { X, Plus, Trash2, Pencil, Check, LayoutTemplate } from "lucide-react";
 import Database from "@tauri-apps/plugin-sql";
+import { useConfirm } from "./ConfirmDialog";
+import { toast } from "./Toast";
 
 interface ModalProps { isOpen: boolean; onClose: () => void; onSave?: () => void; }
 
 export function ModalGestionFormaciones({ isOpen, onClose, onSave }: ModalProps) {
+  const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
   const [formaciones, setFormaciones] = useState<any[]>([]);
   const [nueva, setNueva] = useState("");
   const [editandoId, setEditandoId] = useState<number | null>(null);
@@ -28,9 +31,15 @@ export function ModalGestionFormaciones({ isOpen, onClose, onSave }: ModalProps)
   };
 
   const eliminar = async (id: number) => {
-    if (!confirm("¿Borrar esta táctica?")) return;
+    const ok = await confirmar({
+      titulo: "Eliminar táctica",
+      mensaje: "¿Eliminar esta formación? Dejará de estar disponible en los selectores.",
+      textoConfirmar: "Sí, eliminar",
+    });
+    if (!ok) return;
     const db = await Database.load("sqlite:globalfutsal.db");
     await db.execute("DELETE FROM Formacion WHERE id = ?", [id]);
+    toast.success("Táctica eliminada");
     cargar();
     if (onSave) onSave();
   };
@@ -81,6 +90,7 @@ export function ModalGestionFormaciones({ isOpen, onClose, onSave }: ModalProps)
           <button onClick={crear} className="bg-blue-600 hover:bg-blue-500 text-white px-4 rounded font-bold flex items-center gap-1 transition-colors"><Plus size={18} /> Añadir</button>
         </div>
       </div>
+      {dialogoConfirmar}
     </div>
   );
 }

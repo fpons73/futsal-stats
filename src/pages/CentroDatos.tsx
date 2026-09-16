@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { BarChart3, Trophy, User, Shield, Briefcase, Settings, ChevronDown, Plus, Trash2, Save } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
 import ImagenLocal from "../components/ImagenLocal";
+import { useFormGuard } from "../hooks/useFormGuard";
 
 // --- INTERFACES ---
 interface Selector { id: number; nombre: string; }
@@ -93,6 +95,22 @@ export default function CentroDatos() {
     const [reglas, setReglas] = useState<ReglaPosicion[]>([]);
     const [modalConfigOpen, setModalConfigOpen] = useState(false);
     const [nuevaRegla, setNuevaRegla] = useState<ReglaPosicion>({ desde: 1, hasta: 1, nombre: "", color: "#3b82f6" });
+
+    // --- GUARDA DE CAMBIOS SIN GUARDAR (configuración de colores) ---
+    // Lo persistente es la lista de reglas; se compara serializada para que la
+    // recreación de objetos (agregar/eliminar) no confunda identidad con edición.
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+    const valoresConfig = () => ({ reglas: JSON.stringify(reglas) });
+    const abrirConfig = () => {
+        iniciar(valoresConfig());
+        setModalConfigOpen(true);
+    };
+    const cerrarModalConfigSeguro = async () => {
+        if (await cerrarSeguro(valoresConfig(), guardarReglas)) setModalConfigOpen(false);
+    };
+    const guardarYCerrarConfig = async () => {
+        if (await guardarReglas()) setModalConfigOpen(false);
+    };
 
     useEffect(() => { cargarEdiciones(); cargarPaises(); }, []);
 
@@ -328,7 +346,7 @@ export default function CentroDatos() {
     };
 
     const agregarRegla = () => {
-        if (!nuevaRegla.nombre) return alert("Indica un nombre para la regla");
+        if (!nuevaRegla.nombre) return toast.warning("Indica un nombre para la regla");
         setReglas([...reglas, nuevaRegla].sort((a, b) => a.desde - b.desde));
         setNuevaRegla({ desde: nuevaRegla.hasta + 1, hasta: nuevaRegla.hasta + 1, nombre: "", color: "#3b82f6" });
     };
@@ -337,14 +355,18 @@ export default function CentroDatos() {
         setReglas(reglas.filter((_, i) => i !== idx));
     };
 
-    const guardarReglas = async () => {
+    const guardarReglas = async (): Promise<boolean> => {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             await db.execute("UPDATE Edicion SET reglas_json = $1 WHERE id = $2", [JSON.stringify(reglas), selEdicion]);
-            setModalConfigOpen(false);
             await cargarClasificacion(); // Refrescar los datos para aplicar los colores
-            alert("Configuración de colores guardada ✅");
-        } catch (e) { console.error(e); }
+            toast.success("Configuración de colores guardada");
+            return true;
+        } catch (e) {
+            console.error(e);
+            toast.error("No se pudo guardar la configuración de colores");
+            return false;
+        }
     };
 
     const getReglaPosicion = (pos: number) => {
@@ -381,7 +403,7 @@ export default function CentroDatos() {
 
                 {tab === "tabla" && (
                     <button
-                        onClick={() => setModalConfigOpen(true)}
+                        onClick={abrirConfig}
                         className="flex items-center gap-2 text-xs font-black uppercase text-silver/60 hover:text-orange transition-all duration-300 tracking-wider px-3 py-2"
                     >
                         <Settings size={14} className="animate-spin-slow" /> CONFIGURAR COLORES
@@ -536,7 +558,7 @@ export default function CentroDatos() {
             </div>
 
             {/* MODAL CONFIGURAR COLORES */}
-            <Modal isOpen={modalConfigOpen} onClose={() => setModalConfigOpen(false)} title="Configurar Colores de Posición">
+            <Modal isOpen={modalConfigOpen} onClose={cerrarModalConfigSeguro} title="Configurar Colores de Posición">
                 <div className="space-y-4 text-white">
                     <p className="text-xs text-silver/50 italic">Define rangos de posiciones y colores para resaltar la tabla (ej: 1 al 1, Campeón).</p>
 
@@ -573,11 +595,12 @@ export default function CentroDatos() {
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setModalConfigOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
-                        <button onClick={guardarReglas} className="bg-gradient-to-r from-orange to-orange-neon text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2"><Save size={16} /> GUARDAR CONFIGURACIÓN</button>
+                        <button onClick={cerrarModalConfigSeguro} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
+                        <button onClick={guardarYCerrarConfig} className="bg-gradient-to-r from-orange to-orange-neon text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2"><Save size={16} /> GUARDAR CONFIGURACIÓN</button>
                     </div>
                 </div>
             </Modal>
+            {dialogo}
         </div>
     );
 }

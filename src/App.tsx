@@ -4,7 +4,9 @@ import { ThemeProvider } from "./context/ThemeContext";
 import { EdicionProvider } from "./context/EdicionContext";
 import { ModoProvider } from "./context/ModoContext";
 import { iniciarBaseDeDatos } from "./db";
+import { aplicarCarpetaDatosAlArranque } from "./utils/carpetaDatos";
 import Sidebar from "./components/Sidebar";
+import { ToastContainer } from "./components/Toast";
 import Dashboard from "./pages/Dashboard";
 import Competiciones from "./pages/Competiciones";
 import Temporadas from "./pages/Temporadas";
@@ -33,6 +35,9 @@ function App() {
 
   useEffect(() => {
     iniciarBaseDeDatos()
+      // Tras iniciar la BD, aplicar la carpeta de datos configurada (si la hay)
+      // para que fs y el protocolo de assets la permitan desde el primer render.
+      .then(() => aplicarCarpetaDatosAlArranque())
       .then(() => setDbReady(true))
       .catch((e) => {
         console.error("Error iniciando DB:", e);
@@ -108,6 +113,7 @@ function App() {
                   <Route path="*" element={<div className="p-10 text-silver/40">Página no encontrada</div>} />
                 </Routes>
               </main>
+              <ToastContainer />
             </div>
           </Router>
         </EdicionProvider>

@@ -48,7 +48,7 @@ export function EstadisticasJugadorPartido({ partidoId, localId, visitanteId, lo
   async function cargarDatos() {
     const db = await Database.load("sqlite:globalfutsal.db");
     const query = `
-      SELECT a.persona_id, a.dorsal, p.nombre_deportivo, a.equipo_id, p.posicion_principal
+      SELECT a.persona_id, a.dorsal, p.nombre_deportivo, a.equipo_id, COALESCE(a.posicion_inicial, p.posicion_principal) as posicion_principal
       FROM Alineacion a
       JOIN Persona p ON a.persona_id = p.id
       WHERE a.partido_id = ? AND (p.roles IS NULL OR p.roles NOT LIKE '%Entrenador%')

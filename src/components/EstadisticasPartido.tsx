@@ -3,6 +3,7 @@ import { Save } from "lucide-react";
 import Database from "@tauri-apps/plugin-sql";
 import { ResumenPartidoIA } from "./ResumenPartidoIA";
 import { ComparisonMetricBar } from "./charts/ComparisonMetricBar";
+import { UndoToast, useUndoToast } from "./UndoToast";
 
 interface Props {
   partidoId: number;
@@ -30,8 +31,35 @@ export function EstadisticasPartido({ partidoId, localId, visitanteId, localNomb
     setStats({ local: resL[0] || {}, visitante: resV[0] || {} });
   }
 
+  // Snapshot de stats guardadas anteriormente, para poder deshacer el guardado.
+  interface StatsSnapshot { local: any; visitante: any; existiaLocal: boolean; existiaVisitante: boolean; }
+  const { pendiente: statsAnteriores, push: pushStatsSnapshot, clear: clearStatsSnapshot } = useUndoToast<StatsSnapshot>();
+
+  /** Deshacer: restaura los valores anteriores (o elimina las filas recién creadas). */
+  const deshacerGuardadoStats = async (snap: StatsSnapshot) => {
+    const db = await Database.load("sqlite:globalfutsal.db");
+    const restaurarEquipo = async (fila: any, existia: boolean, equipoId: number) => {
+      if (!existia) {
+        await db.execute("DELETE FROM EstadisticaPartidoEquipo WHERE partido_id=? AND equipo_id=?", [partidoId, equipoId]);
+        return;
+      }
+      await db.execute(
+        `UPDATE EstadisticaPartidoEquipo SET posesion=?, tiros=?, tiros_puerta=?, corners=?, faltas=?, faltas_acumulativas=?, saques_banda=?, saques_puerta=?, pases_totales=?, pases_precisos=?, centros_totales=?, centros_buenos=?, entradas_totales=?, entradas_ganadas=?, intercepciones=?, recuperaciones=?, despejes=?, duelos_ganados=?, duelos_perdidos=?, paradas=?, punos=?, tarjetas_amarillas=?, tarjetas_rojas=? WHERE partido_id=? AND equipo_id=?`,
+        [fila.posesion ?? 0, fila.tiros ?? 0, fila.tiros_puerta ?? 0, fila.corners ?? 0, fila.faltas ?? 0, fila.faltas_acumulativas ?? 0, fila.saques_banda ?? 0, fila.saques_puerta ?? 0, fila.pases_totales ?? 0, fila.pases_precisos ?? 0, fila.centros_totales ?? 0, fila.centros_buenos ?? 0, fila.entradas_totales ?? 0, fila.entradas_ganadas ?? 0, fila.intercepciones ?? 0, fila.recuperaciones ?? 0, fila.despejes ?? 0, fila.duelos_ganados ?? 0, fila.duelos_perdidos ?? 0, fila.paradas ?? 0, fila.punos ?? 0, fila.tarjetas_amarillas ?? 0, fila.tarjetas_rojas ?? 0, partidoId, equipoId]
+      );
+    };
+    await restaurarEquipo(snap.local, snap.existiaLocal, localId);
+    await restaurarEquipo(snap.visitante, snap.existiaVisitante, visitanteId);
+    clearStatsSnapshot();
+    await cargarStats();
+  };
+
   const guardarStats = async () => {
     const db = await Database.load("sqlite:globalfutsal.db");
+    // Snapshot de las filas tal y como estaban en BD antes de sobrescribir.
+    const resL = await db.select<any[]>("SELECT * FROM EstadisticaPartidoEquipo WHERE partido_id=? AND equipo_id=?", [partidoId, localId]);
+    const resV = await db.select<any[]>("SELECT * FROM EstadisticaPartidoEquipo WHERE partido_id=? AND equipo_id=?", [partidoId, visitanteId]);
+    pushStatsSnapshot({ local: resL[0] || {}, visitante: resV[0] || {}, existiaLocal: resL.length > 0, existiaVisitante: resV.length > 0 });
     for (const [equipo, statObj] of Object.entries(stats)) {
       const equipoId = equipo === "local" ? localId : visitanteId;
       const s: any = statObj;
@@ -155,6 +183,13 @@ export function EstadisticasPartido({ partidoId, localId, visitanteId, localNomb
           </table>
         </div>
       )}
+
+      {/* Deshacer guardado de estadísticas */}
+      <UndoToast
+        pendiente={statsAnteriores}
+        onUndo={deshacerGuardadoStats}
+        mensaje="Estadísticas guardadas (valores anteriores restaurables)"
+      />
     </div>
   );
 }

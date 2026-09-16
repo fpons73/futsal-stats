@@ -1,14 +1,21 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
 import Database from "@tauri-apps/plugin-sql";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import {
     Users, Trophy, Shield, Activity,
-    MapPin, Goal, CalendarDays
+    MapPin, Goal, CalendarDays, FileClock, Trash2
 } from "lucide-react";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
     PieChart, Pie, Cell, Legend
 } from "recharts";
+import { toast } from "../components/Toast";
+import { UndoToast, useUndoToast } from "../components/UndoToast";
+import {
+    listarBorradores, leerBorrador, borrarBorrador, guardarBorrador,
+    BorradorPendiente, BorradorActa,
+} from "../utils/actaDraft";
 
 // --- INTERFACES DE DATOS ---
 interface DashboardStats {
@@ -29,6 +36,144 @@ interface RankingPais {
 interface StatsPosicion {
     name: string;
     value: number;
+}
+
+/** Borrador pendiente enriquecido con el nombre del partido (resuelto de la BD). */
+interface PartidoBorrador extends BorradorPendiente {
+    local: string | null;
+    visitante: string | null;
+    fecha: string | null;
+}
+
+function nombrePartido(b: { partidoId: number; local: string | null; visitante: string | null }): string {
+    return b.local && b.visitante ? `${b.local} vs ${b.visitante}` : `Partido #${b.partidoId}`;
+}
+
+function haceCuanto(ts: number): string {
+    const min = Math.floor((Date.now() - ts) / 60000);
+    if (min < 1) return "hace instantes";
+    if (min < 60) return `hace ${min} min`;
+    const h = Math.floor(min / 60);
+    if (h < 24) return `hace ${h} h`;
+    const d = Math.floor(h / 24);
+    return `hace ${d} ${d === 1 ? "día" : "días"}`;
+}
+
+/** Widget: lista los borradores de acta pendientes (localStorage) con el nombre
+    del partido resuelto desde la BD. Permite abrir el partido para recuperar el
+    borrador o descartarlo (con deshacer). Se oculta cuando no hay ninguno. */
+function BorradoresPendientes() {
+    const [borradores, setBorradores] = useState<PartidoBorrador[]>([]);
+    const { pendiente, push } = useUndoToast<{ clave: string; borrador: BorradorActa; nombre: string }>();
+
+    const cargar = useCallback(async () => {
+        const pendientes = listarBorradores();
+        if (pendientes.length === 0) {
+            setBorradores([]);
+            return;
+        }
+        try {
+            const db = await Database.load("sqlite:globalfutsal.db");
+            const enriquecidos = await Promise.all(pendientes.map(async (b) => {
+                try {
+                    const r = await db.select<any[]>(
+                        `SELECT l.nombre as local, v.nombre as visitante, p.fecha_hora as fecha
+                         FROM Partido p
+                         JOIN Equipo l ON p.local_id = l.id
+                         JOIN Equipo v ON p.visitante_id = v.id
+                         WHERE p.id = ?`,
+                        [b.partidoId]
+                    );
+                    return {
+                        ...b,
+                        local: (r[0]?.local as string) ?? null,
+                        visitante: (r[0]?.visitante as string) ?? null,
+                        fecha: (r[0]?.fecha as string) ?? null,
+                    };
+                } catch {
+                    return { ...b, local: null, visitante: null, fecha: null };
+                }
+            }));
+            setBorradores(enriquecidos);
+        } catch (error) {
+            console.error("Error resolviendo partidos de borradores:", error);
+            setBorradores(pendientes.map(b => ({ ...b, local: null, visitante: null, fecha: null })));
+        }
+    }, []);
+
+    useEffect(() => {
+        cargar();
+    }, [cargar]);
+
+    const descartar = (b: PartidoBorrador) => {
+        const snapshot = leerBorrador(b.clave); // validado; null si corrupto
+        borrarBorrador(b.clave);
+        setBorradores(prev => prev.filter(x => x.clave !== b.clave));
+        if (snapshot) push({ clave: b.clave, borrador: snapshot, nombre: nombrePartido(b) });
+    };
+
+    const deshacer = async (d: { clave: string; borrador: BorradorActa; nombre: string }) => {
+        guardarBorrador(d.clave, d.borrador); // reemplaza el borrador sin borrar los demás
+        await cargar();
+        toast.info(`Borrador de ${d.nombre} restaurado`);
+    };
+
+    if (borradores.length === 0) return null;
+
+    return (
+        <div className="glass-panel p-6 rounded-2xl border border-warning/20 mb-8">
+            <h3 className="font-display font-bold text-white mb-5 flex items-center gap-2 text-sm uppercase tracking-wider">
+                <FileClock size={18} className="text-warning" /> Borradores de acta pendientes
+                <span className="text-[10px] font-black bg-warning/15 text-warning border border-warning/25 rounded-full px-2 py-0.5">
+                    {borradores.length}
+                </span>
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {borradores.map((b) => {
+                    const fechaOk = b.fecha && !isNaN(new Date(b.fecha).getTime())
+                        ? ` · ${new Date(b.fecha).toLocaleDateString()}`
+                        : "";
+                    return (
+                        <div key={b.clave} className="flex items-center gap-3 p-3 bg-white/5 border border-white/5 rounded-xl">
+                            <div className="w-9 h-9 shrink-0 rounded-lg bg-warning/10 border border-warning/25 flex items-center justify-center">
+                                <FileClock size={16} className="text-warning" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <Link
+                                    to={`/partido/${b.partidoId}`}
+                                    className="block text-sm font-bold text-white hover:text-orange transition-colors truncate"
+                                >
+                                    {nombrePartido(b)}
+                                </Link>
+                                <p className="text-[11px] text-silver/50 truncate">
+                                    {b.jugConvocados} convocados · {haceCuanto(b.ts)}{fechaOk}
+                                </p>
+                            </div>
+                            <Link
+                                to={`/partido/${b.partidoId}`}
+                                title="Abrir el partido para revisar y recuperar este borrador"
+                                className="px-3 py-1.5 rounded-lg text-[11px] font-black uppercase tracking-wider text-white bg-success/80 hover:bg-success transition-colors shrink-0"
+                            >
+                                Recuperar
+                            </Link>
+                            <button
+                                onClick={() => descartar(b)}
+                                title="Descartar borrador"
+                                className="p-2 rounded-lg text-silver/40 hover:text-red hover:bg-red/10 transition-colors shrink-0"
+                            >
+                                <Trash2 size={15} />
+                            </button>
+                        </div>
+                    );
+                })}
+            </div>
+            <UndoToast
+                pendiente={pendiente}
+                onUndo={deshacer}
+                mensaje={(d) => `Borrador de ${d.nombre} descartado`}
+            />
+        </div>
+    );
 }
 
 export default function Dashboard() {
@@ -115,6 +260,9 @@ export default function Dashboard() {
                 <h1 className="text-3xl font-display font-black text-white tracking-tight text-glow-orange">Dashboard</h1>
                 <p className="text-silver/60 text-sm mt-1">Resumen analítico global de Futsal Stats.</p>
             </div>
+
+            {/* 0. BORRADORES DE ACTA PENDIENTES */}
+            <BorradoresPendientes />
 
             {/* 1. TARJETAS KPI SUPERIORES */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

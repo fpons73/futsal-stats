@@ -1,10 +1,15 @@
 import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { open, ask } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Upload, MapPin, Filter, X } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
+import { UndoToast } from "../components/UndoToast";
+import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
 import ImagenLocal from "../components/ImagenLocal";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useFormGuard } from "../hooks/useFormGuard";
 
 interface Pabellon {
     id: number;
@@ -42,6 +47,13 @@ export default function Pabellones() {
     const [selPais, setSelPais] = useState("");
     const [fotoPath, setFotoPath] = useState<string | null>(null);
 
+    // --- CAMBIOS SIN GUARDAR (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+    // Confirmación temática para acciones destructivas (sustituye a ask() nativo).
+    const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+    // Borrado con deshacer: instantánea antes del DELETE, re-INSERT al deshacer.
+    const { pendiente: filaBorrada, borrar: borrarFila, deshacer, clear: limpiarBorrado } = useBorradorConDeshacer("Estadio", cargarDatos);
+
     useEffect(() => { cargarDatos(); }, []);
 
     async function cargarDatos() {
@@ -78,6 +90,7 @@ export default function Pabellones() {
     function abrirCrear() {
         setEditingId(null);
         setNombre(""); setCiudad(""); setCapacidad(0); setSelPais(""); setFotoPath(null);
+        iniciar({ nombre: "", ciudad: "", capacidad: 0, selPais: "", fotoPath: null });
         setIsModalOpen(true);
     }
 
@@ -88,11 +101,12 @@ export default function Pabellones() {
         setCapacidad(p.capacidad);
         setSelPais(p.pais_id?.toString() || "");
         setFotoPath(p.foto_path);
+        iniciar({ nombre: p.nombre, ciudad: p.ciudad, capacidad: p.capacidad, selPais: p.pais_id?.toString() || "", fotoPath: p.foto_path });
         setIsModalOpen(true);
     }
 
-    async function guardar() {
-        if (!nombre) { alert("El nombre es obligatorio"); return; }
+    async function guardar(): Promise<boolean> {
+        if (!nombre) { toast.warning("El nombre es obligatorio"); return false; }
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             const paisId = selPais ? parseInt(selPais) : null;
@@ -110,16 +124,22 @@ export default function Pabellones() {
             }
             setIsModalOpen(false);
             cargarDatos();
-        } catch (error) { console.error(error); }
+            return true;
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al guardar el pabellón");
+            return false;
+        }
+    }
+
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro({ nombre, ciudad, capacidad, selPais, fotoPath }, guardar)) setIsModalOpen(false);
     }
 
     async function borrar(id: number) {
-        const confirm = await ask("¿Eliminar este pabellón?", { title: "Confirmar", kind: "warning", okLabel: "Sí", cancelLabel: "No" });
-        if (confirm) {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            await db.execute("DELETE FROM Estadio WHERE id = $1", [id]);
-            cargarDatos();
-        }
+        const confirm = await confirmar({ mensaje: "¿Eliminar este pabellón?", titulo: "Confirmar", textoConfirmar: "Sí", textoCancelar: "No", peligroso: true });
+        if (confirm) await borrarFila(id);
     }
 
     // Filtrado
@@ -207,7 +227,7 @@ export default function Pabellones() {
             </div>
 
             {/* MODAL */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Pabellón" : "Nuevo Pabellón"}>
+            <Modal isOpen={isModalOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Pabellón" : "Nuevo Pabellón"}>
                 <div className="space-y-4">
 
                     {/* Foto Panorámica */}
@@ -252,12 +272,22 @@ export default function Pabellones() {
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
                         <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>
 
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
+            {/* Diálogo de confirmación destructiva */}
+            {dialogoConfirmar}
+            <UndoToast
+                pendiente={filaBorrada}
+                onUndo={deshacer}
+                onDescartar={limpiarBorrado}
+                mensaje={(f) => `Pabellón ${f.nombre} eliminado`}
+            />
         </div>
     );
 }

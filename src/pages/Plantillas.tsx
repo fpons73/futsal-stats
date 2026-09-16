@@ -3,8 +3,10 @@ import Database from "@tauri-apps/plugin-sql";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Shirt, Plus, Trash2, Edit, Search, User, Briefcase, ChevronRight, Download, Upload } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
 import { normalizeString } from "../utils/stringUtils";
+import { useFormGuard } from "../hooks/useFormGuard";
 
 // Definición de posiciones de Futsal
 const POSICIONES = ["Portero", "Cierre", "Ala", "Pívot", "Universal"];
@@ -75,6 +77,9 @@ export default function Plantillas() {
     // Modal de Crear/Editar Persona
     const [modalPersonaOpen, setModalPersonaOpen] = useState(false);
     const [editPersonaId, setEditPersonaId] = useState<number | null>(null); // Si es null = Crear nuevo
+
+    // --- CAMBIOS SIN GUARDAR EN EL FORMULARIO DE PERSONA (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo: dialogoPersona } = useFormGuard();
     const [personaForm, setPersonaForm] = useState({
         nombre: "",
         apellidos: "",
@@ -161,6 +166,7 @@ export default function Plantillas() {
         setPersonaToAdd(p);
         setDorsalTemp("");
         if (tab === "Jugador") {
+            iniciar({ dorsal: "" }); // instantánea base para la guarda del modal de dorsal
             setModalDorsalOpen(true);
         } else {
             altaDirecta(p);
@@ -178,23 +184,41 @@ export default function Plantillas() {
         } catch (e) { console.error(e); }
     }
 
-    async function guardarAltaConDorsal() {
-        if (!personaToAdd) return;
+    async function guardarAltaConDorsal(): Promise<boolean> {
+        if (!personaToAdd) return false;
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             await db.execute(
                 "INSERT INTO Plantilla (edicion_id, equipo_id, persona_id, rol, dorsal) VALUES ($1, $2, $3, $4, $5)",
                 [selEdicion, selEquipo, personaToAdd.id, tab, dorsalTemp || null]
             );
-            setModalDorsalOpen(false);
             cargarListas();
-        } catch (e) { console.error(e); }
+            return true;
+        } catch (e) {
+            console.error(e);
+            toast.error("No se pudo inscribir a la persona");
+            return false;
+        }
     }
+
+    // Guardado explícito (Enter / botón Inscribir): guarda y cierra solo si triunfó.
+    const inscribirYCerrar = async () => {
+        if (await guardarAltaConDorsal()) setModalDorsalOpen(false);
+    };
+
+    // Intento de cierre (Escape / X / Cancelar): con dorsal tecleado pregunta antes
+    // de descartar la inscripción pendiente.
+    const cerrarDorsalSeguro = async () => {
+        if (await cerrarSeguro({ dorsal: dorsalTemp }, guardarAltaConDorsal, { textoGuardar: "Inscribir y cerrar" })) {
+            setModalDorsalOpen(false);
+            setPersonaToAdd(null);
+        }
+    };
 
     const handleKeyDownDorsal = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter') {
             e.preventDefault();
-            guardarAltaConDorsal();
+            inscribirYCerrar();
         }
     };
 
@@ -211,7 +235,9 @@ export default function Plantillas() {
     // Abrir modal para crear NUEVO
     function abrirCrearPersona() {
         setEditPersonaId(null);
-        setPersonaForm({ nombre: "", apellidos: "", apodo: "", fecha_nacimiento: "", pais_id: "", pais2_id: "", pos1: "Ala", pos2: "", foto: null });
+        const inicial = { nombre: "", apellidos: "", apodo: "", fecha_nacimiento: "", pais_id: "", pais2_id: "", pos1: "Ala", pos2: "", foto: null };
+        setPersonaForm(inicial);
+        iniciar(inicial);
         setModalPersonaOpen(true);
     }
 
@@ -229,7 +255,7 @@ export default function Plantillas() {
         const posSecundarias = getPosicionesSecundarias(p.posiciones_secundarias);
         if (posSecundarias.length > 0) pos2 = posSecundarias[0];
 
-        setPersonaForm({
+        const inicial = {
             nombre: p.nombre,
             apellidos: p.apellidos,
             apodo: p.nombre_deportivo,
@@ -239,9 +265,18 @@ export default function Plantillas() {
             pos1: p.posicion_principal || "Ala",
             pos2: pos2,
             foto: p.foto_path
-        });
+        };
+        setPersonaForm(inicial);
+        iniciar(inicial);
         setModalPersonaOpen(true);
     }
+
+    /** Cierre seguro del modal de persona: si el formulario difiere de su estado
+        inicial, ofrece Guardar y cerrar / Descartar cambios / Seguir editando. */
+    const cerrarModalPersonaSeguro = async () => {
+        const ok = await cerrarSeguro(personaForm, guardarPersonaDB);
+        if (ok) setModalPersonaOpen(false);
+    };
 
     async function seleccionarNuevaFoto() {
         try {
@@ -253,10 +288,10 @@ export default function Plantillas() {
         } catch (err) { console.error(err); }
     }
 
-    async function guardarPersonaDB() {
+    async function guardarPersonaDB(): Promise<boolean> {
         if (!personaForm.nombre || !personaForm.pais_id) {
-            alert("El nombre y el país son obligatorios.");
-            return;
+            toast.warning("El nombre y el país son obligatorios.");
+            return false;
         }
 
         try {
@@ -292,7 +327,12 @@ export default function Plantillas() {
             }
             setModalPersonaOpen(false);
             cargarListas();
-        } catch (e) { console.error(e); alert("Error al guardar"); }
+            return true;
+        } catch (e) {
+            console.error(e);
+            toast.error("Error al guardar");
+            return false;
+        }
     }
 
     // --- IMPORTAR ---
@@ -322,9 +362,9 @@ export default function Plantillas() {
             WHERE edicion_id = $2 AND equipo_id = $3
         `, [selEdicion, selEdicionPrevia, selEquipo]);
             setModalImportarOpen(false);
-            alert("Plantilla importada con éxito");
+            toast.success("Plantilla importada con éxito");
             cargarListas();
-        } catch (e) { console.error(e); alert("Error importando"); }
+        } catch (e) { console.error(e); toast.error("Error importando"); }
     }
 
     const getFlag = (id: number) => {
@@ -552,7 +592,7 @@ export default function Plantillas() {
             </div>
 
             {/* MODAL DORSAL */}
-            <Modal isOpen={modalDorsalOpen} onClose={() => setModalDorsalOpen(false)} title={`Inscribir a ${personaToAdd?.nombre_deportivo}`}>
+            <Modal isOpen={modalDorsalOpen} onClose={cerrarDorsalSeguro} title={`Inscribir a ${personaToAdd?.nombre_deportivo}`}>
                 <div className="space-y-4 text-white">
                     <p className="text-sm text-silver/70">Asigna el dorsal para esta temporada:</p>
                     <input
@@ -565,14 +605,14 @@ export default function Plantillas() {
                         autoFocus
                     />
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setModalDorsalOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
-                        <button onClick={guardarAltaConDorsal} className="bg-purple text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-blue">Inscribir</button>
+                        <button onClick={cerrarDorsalSeguro} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
+                        <button onClick={inscribirYCerrar} className="bg-purple text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-blue">Inscribir</button>
                     </div>
                 </div>
             </Modal>
 
             {/* MODAL CREAR/EDITAR PERSONA */}
-            <Modal isOpen={modalPersonaOpen} onClose={() => setModalPersonaOpen(false)} title={editPersonaId ? `Editar ${tab}` : `Nuevo ${tab}`}>
+            <Modal isOpen={modalPersonaOpen} onClose={cerrarModalPersonaSeguro} title={editPersonaId ? `Editar ${tab}` : `Nuevo ${tab}`}>
                 <div className="space-y-4 text-white">
                     <div className="flex justify-center mb-4">
                         <div onClick={seleccionarNuevaFoto} className="w-24 h-24 rounded-full bg-navy border-2 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative group shadow-inner">
@@ -636,7 +676,7 @@ export default function Plantillas() {
                     )}
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setModalPersonaOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
+                        <button onClick={cerrarModalPersonaSeguro} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
                         <button onClick={guardarPersonaDB} className="bg-gradient-to-r from-orange to-orange-neon text-white px-5 py-2.5 rounded-xl font-bold shadow-neon-orange">Guardar Cambios</button>
                     </div>
                 </div>
@@ -663,6 +703,8 @@ export default function Plantillas() {
                 </div>
             </Modal>
 
+            {/* Diálogo de cambios sin guardar del formulario de persona */}
+            {dialogoPersona}
         </div>
     );
 }

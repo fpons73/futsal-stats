@@ -26,4 +26,12 @@ tauri-plugin-sql = { version = "2", features = ["sqlite"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 reqwest = { version = "0.12", features = ["blocking"] }
+# Acceso directo a sqlx para transacciones reales (mismas features que tauri-plugin-sql)
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
+# Misma familia de versiones que usa tauri::fs::Scope internamente (tests)
+glob = "0.3"
+
+[dev-dependencies]
+# mock_app para probar el alcance fs real (tauri::fs::Scope) en tests de integración
+tauri = { version = "2", features = ["test"] }
 

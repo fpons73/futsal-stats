@@ -8,9 +8,20 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "dialog:default",
+    "dialog:allow-open",
+    "dialog:allow-save",
     "fs:default",
     "fs:allow-read-file",
+    "fs:allow-write-text-file",
+    {
+      "identifier": "fs:scope",
+      "allow": [
+        "$HOME/**",
+        "$DESKTOP/**",
+        "$DOWNLOAD/**",
+        "$DOCUMENT/**"
+      ]
+    },
     "sql:default",
     "sql:allow-execute",
     "sql:allow-select",
@@ -18,20 +29,5 @@
   ],
   "platforms": [
     "windows"
-  ],
-  "scopes": [
-    {
-      "identifier": "fs:scope",
-      "allow": [
-        "$HOME/**",
-        "$DESKTOP/**",
-        "$DOWNLOADS/**",
-        "$DOCUMENT/**",
-        "C:\\**",
-        "C:/**",
-        "C:\\Users\\**",
-        "C:/Users/**"
-      ]
-    }
   ]
 }

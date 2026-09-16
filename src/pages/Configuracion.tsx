@@ -1,12 +1,21 @@
 import { useState, useEffect } from "react";
-import { Settings, Trash2, Database as DbIcon, Check, Sparkles, Calendar, Users } from "lucide-react";
+import { Settings, Trash2, Database as DbIcon, Check, Sparkles, Calendar, Users, FileClock, FolderOpen } from "lucide-react";
 import Database from "@tauri-apps/plugin-sql";
-import { ask, message } from "@tauri-apps/plugin-dialog";
+import { open as abrirDialogo } from "@tauri-apps/plugin-dialog";
 import { ModalBuscarDuplicados } from "../components/ModalBuscarDuplicados";
+import { useConfirm } from "../components/ConfirmDialog";
 import { geminiService, DEFAULT_GEMINI_MODEL } from "../services/geminiService";
 import { exportarPersonasCSV, exportarEquiposCSV } from "../utils/csvExporters";
 import { seedConfederacionesFutsal } from "../utils/seedConfederaciones";
 import { seedCompeticionesFutsal } from "../utils/seedCompeticionesFutsal";
+import {
+    leerCarpetaDatos, guardarCarpetaDatos, esRutaAlcanzable, CARPETA_SUGERIDA,
+} from "../utils/carpetaDatos";
+import { toast } from "../components/Toast";
+import {
+    leerDiasRetencion, guardarDiasRetencion, restablecerDiasRetencion,
+    barrerBorradoresAntiguos, listarBorradores,
+} from "../utils/actaDraft";
 
 export default function Configuracion() {
   const [loading, setLoading] = useState(false);
@@ -14,11 +23,25 @@ export default function Configuracion() {
   const [apiKey, setApiKey] = useState("");
   const [model, setModel] = useState(DEFAULT_GEMINI_MODEL);
   const [savedKey, setSavedKey] = useState(false);
+  // Preferencia de retención de borradores ("" mientras carga).
+  const [diasRetencion, setDiasRetencion] = useState<number | "">("");
+  const [numBorradores, setNumBorradores] = useState(0);
+  // Carpeta de datos configurable (null mientras carga).
+  const [carpetaDatos, setCarpetaDatos] = useState<string | null>(null);
+  const [alcanzable, setAlcanzable] = useState<boolean | null>(null);
+  // Confirmación temática para acciones destructivas (sustituye a ask()/message() nativos).
+  const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
 
   useEffect(() => {
     geminiService.loadPreferences().then(({ apiKey, model }) => {
       setApiKey(apiKey);
       setModel(model);
+    });
+    setDiasRetencion(leerDiasRetencion());
+    setNumBorradores(listarBorradores().length);
+    leerCarpetaDatos().then(c => {
+      setCarpetaDatos(c);
+      if (c) esRutaAlcanzable(c).then(setAlcanzable);
     });
   }, []);
 
@@ -29,9 +52,58 @@ export default function Configuracion() {
     setTimeout(() => setSavedKey(false), 3000);
   };
 
+  // Guarda los días de retención y aplica el barrido al momento: si se reduce el
+  // plazo, los borradores ya caducados se eliminan ahora, no en el próximo arranque.
+  const guardarRetencion = () => {
+    if (diasRetencion === "") return; // aún cargando
+    const efectivo = guardarDiasRetencion(Number(diasRetencion));
+    setDiasRetencion(efectivo);
+    const eliminados = barrerBorradoresAntiguos();
+    const pendientes = listarBorradores().length;
+    setNumBorradores(pendientes);
+    toast.success(
+      eliminados > 0
+        ? `Retención: ${efectivo} días · ${eliminados} borrador(es) caducado(s) eliminado(s)`
+        : `Retención: ${efectivo} días · ${pendientes} borrador(es) siguen vigentes`
+    );
+  };
+
+  const restablecerRetencion = () => {
+    restablecerDiasRetencion();
+    setDiasRetencion(leerDiasRetencion());
+    setNumBorradores(listarBorradores().length);
+    toast.info("Retención de borradores restablecida a 7 días");
+  };
+
+  const elegirCarpetaDatos = async () => {
+    const sel = await abrirDialogo({ directory: true, multiple: false });
+    if (!sel || typeof sel !== "string") return;
+    try {
+      await guardarCarpetaDatos(sel);
+      setCarpetaDatos(sel);
+      setAlcanzable(await esRutaAlcanzable(sel));
+      toast.success(`Carpeta de datos configurada: ${sel}`);
+    } catch (e) {
+      toast.error(`No se pudo configurar la carpeta: ${e}`);
+    }
+  };
+
+  /** Un clic para adoptar la carpeta sugerida (raíz del proyecto en dev). */
+  const usarSugerida = async () => {
+    try {
+      await guardarCarpetaDatos(CARPETA_SUGERIDA);
+      setCarpetaDatos(CARPETA_SUGERIDA);
+      setAlcanzable(await esRutaAlcanzable(CARPETA_SUGERIDA));
+      toast.success(`Carpeta de datos configurada: ${CARPETA_SUGERIDA}`);
+    } catch (e) {
+      toast.error(`No se pudo configurar la carpeta: ${e}`);
+    }
+  };
+
   const resetFabrica = async () => {
-    const confirmacion = await ask("¡PELIGRO!\n\nEsto borrara TODOS los datos (Jugadores, Partidos, Equipos...).\n\n¿Estas seguro?", {
-      title: "¡Peligro!", kind: "warning", okLabel: "Aceptar", cancelLabel: "Cancelar"
+    const confirmacion = await confirmar({
+      mensaje: "¡PELIGRO!\n\nEsto borrará TODOS los datos (Jugadores, Partidos, Equipos...).\n\n¿Estás seguro?",
+      titulo: "¡Peligro!", textoConfirmar: "Aceptar", textoCancelar: "Cancelar", peligroso: true
     });
     if (!confirmacion) return;
 
@@ -50,9 +122,9 @@ export default function Configuracion() {
       await db.execute("DELETE FROM Persona");
       await db.execute("DELETE FROM Estadio");
       await db.execute("DELETE FROM sqlite_sequence");
-      await message("Datos borrados correctamente.", { title: "Exito", kind: "info" });
+      toast.success("Datos borrados correctamente.");
     } catch (err) {
-      await message(`Error: ${err}`, { title: "Error", kind: "error" });
+      toast.error(`Error al borrar datos: ${err}`);
     } finally {
       setLoading(false);
     }
@@ -63,9 +135,9 @@ export default function Configuracion() {
     try {
       await seedConfederacionesFutsal();
       await seedCompeticionesFutsal();
-      await message("Seeds de futsal cargados correctamente.", { title: "Exito", kind: "info" });
+      toast.success("Seeds de futsal cargados correctamente.");
     } catch (err) {
-      await message(`Error: ${err}`, { title: "Error", kind: "error" });
+      toast.error(`Error al cargar seeds: ${err}`);
     } finally {
       setLoading(false);
     }
@@ -91,6 +163,68 @@ export default function Configuracion() {
             {savedKey ? <><Check size={16} /> Guardado</> : "Guardar"}
           </button>
         </div>
+      </div>
+
+      {/* Borradores de acta */}
+      <div className="bg-white/5 rounded-xl border border-white/10 p-5">
+        <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-4"><FileClock size={18} className="text-warning" /> Borradores de acta</h2>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-bold text-gray-400 uppercase">Días de retención antes de eliminarlos automáticamente</label>
+            <div className="flex items-center gap-3 mt-1">
+              <input
+                type="number"
+                min={1}
+                max={365}
+                value={diasRetencion}
+                onChange={e => setDiasRetencion(e.target.value === "" ? "" : Number(e.target.value))}
+                className="w-28 bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white outline-none focus:border-warning"
+              />
+              <button onClick={guardarRetencion} className="px-4 py-2 bg-warning/20 hover:bg-warning/30 text-warning border border-warning/30 rounded-lg font-bold flex items-center gap-2 transition-colors">
+                <Check size={16} /> Guardar
+              </button>
+              <button onClick={restablecerRetencion} className="px-4 py-2 bg-gray-800/50 hover:bg-gray-800 text-gray-300 rounded-lg font-bold flex items-center gap-2 transition-colors">
+                Restablecer (7 días)
+              </button>
+            </div>
+            <p className="text-xs text-gray-400/60 mt-2">
+              Se aplica al arrancar la app y al guardar. Límite 1–365 días.
+              {numBorradores > 0 && ` · ${numBorradores} borrador(es) pendientes ahora mismo`}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Carpeta de datos */}
+      <div className="bg-white/5 rounded-xl border border-white/10 p-5">
+        <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-4"><FolderOpen size={18} className="text-emerald-400" /> Carpeta de datos</h2>
+        <p className="text-xs text-gray-400/70 mb-3">
+          Carpeta que la app puede leer para importar CSVs y mostrar fotos/banderas.
+          En desarrollo la raíz del proyecto ya está permitida; aquí puedes añadir otra.
+        </p>
+        <div className="flex items-center gap-3 flex-wrap">
+          <button onClick={elegirCarpetaDatos} className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg font-bold flex items-center gap-2 transition-colors">
+            <FolderOpen size={16} /> Elegir carpeta…
+          </button>
+          {!carpetaDatos && (
+            <button onClick={usarSugerida} className="px-4 py-2 bg-gray-800/50 hover:bg-gray-800 text-gray-300 border border-gray-700 rounded-lg font-bold flex items-center gap-2 transition-colors">
+              <Check size={16} /> Usar sugerida ({CARPETA_SUGERIDA})
+              <span className="hidden sm:inline text-gray-400/70 font-normal">— donde vive Futsal_Data/</span>
+            </button>
+          )}
+          <code className="text-xs text-gray-300 bg-gray-900/70 border border-gray-700 rounded px-2 py-1.5 max-w-full truncate">
+            {carpetaDatos ?? "— sin configurar —"}
+          </code>
+          {carpetaDatos && alcanzable !== null && (
+            <span className={`text-xs font-bold px-2 py-1 rounded ${alcanzable ? "text-success bg-success/10" : "text-red bg-red/10"}`}>
+              {alcanzable ? "✓ accesible" : "✗ no accesible"}
+            </span>
+          )}
+        </div>
+        <p className="text-xs text-gray-400/60 mt-2">
+          Sugerencia: <code className="text-gray-300">{CARPETA_SUGERIDA}</code> (donde vive <code className="text-gray-300">Futsal_Data/</code>).
+          El cambio se aplica al momento y persiste entre sesiones.
+        </p>
       </div>
 
       {/* Herramientas */}
@@ -122,6 +256,9 @@ export default function Configuracion() {
       </div>
 
       <ModalBuscarDuplicados isOpen={modalDuplicadosOpen} onClose={() => setModalDuplicadosOpen(false)} />
+
+      {/* Diálogo de confirmación destructiva */}
+      {dialogoConfirmar}
     </div>
   );
 }

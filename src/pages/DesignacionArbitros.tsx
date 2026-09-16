@@ -2,8 +2,10 @@ import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Gavel, Plus, X, Search, ChevronRight, Edit, Upload } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
 import ImagenLocal from "../components/ImagenLocal";
+import { useFormGuard } from "../hooks/useFormGuard";
 
 interface SelectorData { id: number; nombre: string; }
 interface Pais { id: number; nombre: string; }
@@ -41,6 +43,9 @@ export default function DesignacionArbitros() {
         pais1: "",
         foto: null as string | null
     });
+
+    // --- CAMBIOS SIN GUARDAR (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
 
     useEffect(() => { cargarTemporadas(); cargarPaises(); }, []);
 
@@ -121,20 +126,24 @@ export default function DesignacionArbitros() {
     // --- ACCIONES CRUD ARBITRO ---
     function abrirCrear() {
         setEditingId(null);
-        setForm({ nombre: "", apellidos: "", apodo: "", nacimiento: "", pais1: "", foto: null });
+        const inicial = { nombre: "", apellidos: "", apodo: "", nacimiento: "", pais1: "", foto: null };
+        setForm(inicial);
+        iniciar(inicial);
         setIsModalOpen(true);
     }
 
     function abrirEditar(a: Arbitro) {
         setEditingId(a.id);
-        setForm({
+        const inicial = {
             nombre: a.nombre,
             apellidos: a.apellidos,
             apodo: a.nombre_deportivo,
             nacimiento: a.fecha_nacimiento || "",
             pais1: a.nacionalidad_principal_id?.toString() || "",
             foto: a.foto_path
-        });
+        };
+        setForm(inicial);
+        iniciar(inicial);
         setIsModalOpen(true);
     }
 
@@ -148,8 +157,8 @@ export default function DesignacionArbitros() {
         } catch (err) { console.error(err); }
     }
 
-    async function guardarArbitro() {
-        if (!form.nombre || !form.pais1) return alert("Datos incompletos");
+    async function guardarArbitro(): Promise<boolean> {
+        if (!form.nombre || !form.pais1) { toast.warning("Datos incompletos"); return false; }
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
 
@@ -167,8 +176,18 @@ export default function DesignacionArbitros() {
             }
             setIsModalOpen(false);
             if (selEdicion) cargarListas(selEdicion);
-        } catch (e) { console.error(e); }
+            return true;
+        } catch (e) {
+            console.error(e);
+            toast.error("Error al guardar el árbitro");
+            return false;
+        }
     }
+
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro(form, guardarArbitro)) setIsModalOpen(false);
+    };
 
     const disponiblesFiltrados = disponibles.filter(a => a.nombre_deportivo.toLowerCase().includes(busqueda.toLowerCase()));
 
@@ -255,7 +274,7 @@ export default function DesignacionArbitros() {
             </div>
 
             {/* MODAL ARBITRO */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Árbitro" : "Nuevo Árbitro"}>
+            <Modal isOpen={isModalOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Árbitro" : "Nuevo Árbitro"}>
                 <div className="space-y-4">
                     <div className="flex items-center gap-4 mb-4">
                         <div onClick={seleccionarFoto} className="w-20 h-20 rounded-full bg-navy-dark border border-white/10 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative shadow-inner">
@@ -295,12 +314,14 @@ export default function DesignacionArbitros() {
                         </div>
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
                         <button onClick={guardarArbitro} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>
 
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
         </div>
     );
 }

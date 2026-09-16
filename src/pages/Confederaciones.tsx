@@ -1,9 +1,14 @@
 import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { open, ask } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Globe, Trash2, Upload, Edit, X } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
+import { UndoToast } from "../components/UndoToast";
+import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useFormGuard } from "../hooks/useFormGuard";
 
 interface Confederacion {
     id: number;
@@ -21,6 +26,13 @@ export default function Confederaciones() {
     const [nombre, setNombre] = useState("");
     const [codigo, setCodigo] = useState("");
     const [logoPath, setLogoPath] = useState<string | null>(null);
+
+    // --- CAMBIOS SIN GUARDAR (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+    // Confirmación temática para acciones destructivas (sustituye a ask() nativo).
+    const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+    // Borrado con deshacer: instantánea antes del DELETE, re-INSERT back al deshacer.
+    const { pendiente: filaBorrada, borrar: borrarFila, deshacer, clear: limpiarBorrado } = useBorradorConDeshacer("Confederacion", cargarDatos);
 
     useEffect(() => { cargarDatos(); }, []);
 
@@ -57,6 +69,7 @@ export default function Confederaciones() {
         setNombre("");
         setCodigo("");
         setLogoPath(null);
+        iniciar({ nombre: "", codigo: "", logoPath: null });
         setIsModalOpen(true);
     }
 
@@ -66,12 +79,16 @@ export default function Confederaciones() {
         setNombre(conf.nombre);
         setCodigo(conf.codigo);
         setLogoPath(conf.logo_path);
+        iniciar({ nombre: conf.nombre, codigo: conf.codigo, logoPath: conf.logo_path });
         setIsModalOpen(true);
     }
 
     // GUARDAR (CREAR O EDITAR)
-    async function guardar() {
-        if (!nombre || !codigo) return;
+    async function guardar(): Promise<boolean> {
+        if (!nombre || !codigo) {
+            toast.warning("Nombre y código son obligatorios");
+            return false;
+        }
 
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -92,35 +109,30 @@ export default function Confederaciones() {
 
             cerrarModal();
             cargarDatos();
+            return true;
         } catch (error) {
             console.error("Error guardando:", error);
-            alert("Error al guardar en base de datos.");
+            toast.error("Error al guardar en base de datos.");
+            return false;
         }
     }
 
     async function borrar(id: number) {
-        const confirm = await ask("¿Eliminar esta confederación permanentemente?", {
-            title: "Confirmar Eliminación",
-            kind: "warning",
-            okLabel: "Sí, Eliminar",
-            cancelLabel: "Cancelar"
-        });
+        const confirm = await confirmar({ mensaje: "¿Eliminar esta confederación permanentemente?", titulo: "Confirmar Eliminación", textoConfirmar: "Sí, Eliminar", textoCancelar: "Cancelar", peligroso: true });
 
         if (!confirm) return;
-
-        try {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            await db.execute("DELETE FROM Confederacion WHERE id = $1", [id]);
-            cargarDatos();
-        } catch (error) {
-            console.error("Error borrando:", error);
-        }
+        await borrarFila(id);
     }
 
     function cerrarModal() {
         setIsModalOpen(false);
         setEditingId(null);
     }
+
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro({ nombre, codigo, logoPath }, guardar)) cerrarModal();
+    };
 
     return (
         <div className="p-8 min-h-screen bg-transparent text-white ml-0 flex flex-col">
@@ -189,7 +201,7 @@ export default function Confederaciones() {
             {/* MODAL */}
             <Modal
                 isOpen={isModalOpen}
-                onClose={cerrarModal}
+                onClose={cerrarModalSeguro}
                 title={editingId ? "Editar Confederación" : "Nueva Confederación"}
             >
                 <div className="space-y-5">
@@ -236,7 +248,7 @@ export default function Confederaciones() {
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5 mt-4">
-                        <button onClick={cerrarModal} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">
                             Cancelar
                         </button>
                         <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
@@ -245,6 +257,17 @@ export default function Confederaciones() {
                     </div>
                 </div>
             </Modal>
+
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
+            {/* Diálogo de confirmación destructiva */}
+            {dialogoConfirmar}
+            <UndoToast
+                pendiente={filaBorrada}
+                onUndo={deshacer}
+                onDescartar={limpiarBorrado}
+                mensaje={(f) => `Confederación ${f.nombre} eliminada`}
+            />
         </div>
     );
 }

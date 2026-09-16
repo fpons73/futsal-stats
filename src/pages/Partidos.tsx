@@ -4,7 +4,14 @@ import { useNavigate } from "react-router-dom";
 import { Calendar, Plus, Edit, Trash2, Eye, Ticket, AlertCircle, Upload, Eraser } from "lucide-react";
 import Modal from "../components/Modal";
 import ImagenLocal from "../components/ImagenLocal";
+import { useFormGuard } from "../hooks/useFormGuard";
 import Papa from "papaparse";
+import { inferirPosicionInicial } from "../utils/posiciones";
+import { toast } from "../components/Toast";
+import { useConfirm } from "../components/ConfirmDialog";
+import { UndoToast } from "../components/UndoToast";
+import { useBorradorPartidoConDeshacer } from "../hooks/useBorradorPartidoConDeshacer";
+import { useEdicion } from "../context/EdicionContext";
 
 // --- HELPERS PARA NORMALIZACIÓN Y SIMILITUD DE TEXTO ---
 function normalizarTexto(texto: string): string {
@@ -71,6 +78,10 @@ interface Selector { id: number; nombre: string; }
 export default function Partidos() {
     const navigate = useNavigate();
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+    // La edición activa global (sidebar) es la única fuente de verdad; el filtro
+    // de esta página es una vista sobre ella y cambiarlo la actualiza también.
+    const { edicionActiva, setEdicionActiva, ediciones: edicionesCtx, cargando: cargandoEdiciones } = useEdicion();
     const [partidoParaImportar, setPartidoParaImportar] = useState<Partido | null>(null);
     const [partidos, setPartidos] = useState<Partido[]>([]);
 
@@ -89,7 +100,6 @@ export default function Partidos() {
     const [nombrePartidoABorrar, setNombrePartidoABorrar] = useState("");
     const [isResetConfirmOpen, setIsResetConfirmOpen] = useState(false);
 
-    const [ediciones, setEdiciones] = useState<Selector[]>([]);
     const [fases, setFases] = useState<Selector[]>([]);
     const [equipos, setEquipos] = useState<Selector[]>([]);
     const [pabellones, setPabellones] = useState<Selector[]>([]);
@@ -97,7 +107,7 @@ export default function Partidos() {
     const [jornadasExistentes, setJornadasExistentes] = useState<string[]>([]);
 
     // Filtros UI
-    const [filtroEdicion, setFiltroEdicion] = useState(() => sessionStorage.getItem("partidos_filtroEdicion") || "");
+    const [filtroEdicion, setFiltroEdicion] = useState("");
     const [filtroFase, setFiltroFase] = useState(() => sessionStorage.getItem("partidos_filtroFase") || "todas");
     const [filtroGrupo, setFiltroGrupo] = useState(() => sessionStorage.getItem("partidos_filtroGrupo") || "todos");
     const [grupos, setGrupos] = useState<string[]>([]);
@@ -124,8 +134,35 @@ export default function Partidos() {
         jornada_texto: ""
     });
 
+    // --- CAMBIOS SIN GUARDAR EN EL FORMULARIO (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+    // Guarda INDEPENDIENTE para los modales rápidos (pabellón/árbitro), que se abren
+    // SOBRE el modal de "Datos del Partido": necesitan su propia instantánea base
+    // para no machacar la del formulario principal.
+    const { iniciar: iniciarRapido, cerrarSeguro: cerrarSeguroRapido, dialogo: dialogoRapido } = useFormGuard();
+    // Borrado de partido con deshacer: instantánea del partido + sus 4 tablas
+    // hijas (alineaciones, eventos, estadísticas) antes del DELETE; el UndoToast
+    // re-inserta todo con los ids originales.
+    const { pendiente: partidoBorrado, borrar: borrarPartidoFila, deshacer: deshacerBorradoPartido, clear: limpiarBorradoPartido } = useBorradorPartidoConDeshacer(() => cargarPartidos());
+
     // 1. Carga inicial
-    useEffect(() => { cargarEdiciones(); cargarPabellones(); }, []);
+    useEffect(() => { cargarPabellones(); }, []);
+
+    // 1b. Sincroniza el filtro de la página con la edición activa global (sidebar).
+    // Si no hay ninguna activa (primer arranque), se adopta la primera disponible.
+    useEffect(() => {
+        sessionStorage.removeItem("partidos_filtroEdicion"); // clave obsoleta: antes esta página guardaba su propia edición
+        if (edicionActiva) {
+            const idStr = String(edicionActiva.id);
+            if (filtroEdicion !== idStr) {
+                setFiltroEdicion(idStr);
+                setFiltroFase("todas");
+                setFiltroGrupo("todos");
+            }
+        } else if (!cargandoEdiciones && edicionesCtx.length > 0) {
+            setEdicionActiva(edicionesCtx[0]);
+        }
+    }, [edicionActiva, cargandoEdiciones, edicionesCtx]);
 
     // 2. Al cambiar edición
     useEffect(() => {
@@ -142,13 +179,6 @@ export default function Partidos() {
             setPartidos([]);
         }
     }, [filtroEdicion, filtroFase, filtroGrupo]);
-
-    // Guardar filtros en sessionStorage al cambiar
-    useEffect(() => {
-        if (filtroEdicion) {
-            sessionStorage.setItem("partidos_filtroEdicion", filtroEdicion);
-        }
-    }, [filtroEdicion]);
 
     useEffect(() => {
         sessionStorage.setItem("partidos_filtroFase", filtroFase);
@@ -170,9 +200,12 @@ export default function Partidos() {
     };
 
     const limpiarDatosPartido = async (p: Partido) => {
-        if (!confirm(`¿Estás seguro de que deseas limpiar todos los datos del partido ${p.local_nombre} vs ${p.visitante_nombre}? Se eliminarán todas las alineaciones, eventos y estadísticas, y el marcador volverá a cero.`)) {
-            return;
-        }
+        const ok = await confirmar({
+            titulo: "Limpiar datos del partido",
+            mensaje: `¿Limpiar todos los datos de ${p.local_nombre} vs ${p.visitante_nombre}? Se eliminarán alineaciones, eventos y estadísticas, y el marcador volverá a cero.`,
+            textoConfirmar: "Sí, limpiar",
+        });
+        if (!ok) return;
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             await db.execute("DELETE FROM Alineacion WHERE partido_id = $1", [p.id]);
@@ -188,10 +221,10 @@ export default function Partidos() {
             `, [p.id]);
             
             cargarPartidos();
-            alert("¡Se han eliminado correctamente todas las alineaciones, eventos y estadísticas del encuentro! Su estado ha vuelto a 'Programado' ✅");
+            toast.success("Alineaciones, eventos y estadísticas eliminadas. El partido volvió a 'Programado'.");
         } catch (err: any) {
             console.error(err);
-            alert("Error al limpiar los datos del partido: " + err.message);
+            toast.error("Error al limpiar los datos del partido: " + err.message);
         }
     };
 
@@ -205,7 +238,7 @@ export default function Partidos() {
                 await procesarEImportarCSV(rows);
             },
             error: (error) => {
-                alert("Error al leer el archivo CSV: " + error.message);
+                toast.error("Error al leer el archivo CSV: " + error.message);
             },
             skipEmptyLines: true,
             delimiter: ";"
@@ -217,7 +250,7 @@ export default function Partidos() {
 
     async function procesarEImportarCSV(rows: string[][]) {
         if (!partidoParaImportar) {
-            return alert("No hay ningún partido seleccionado para la importación.");
+            return toast.warning("No hay ningún partido seleccionado para la importación.");
         }
 
         const partidoId = partidoParaImportar.id;
@@ -275,7 +308,7 @@ export default function Partidos() {
             const csvLocalNombre = info['Equipo Local'];
             const csvVisitanteNombre = info['Equipo Visitante'];
             if (!csvLocalNombre || !csvVisitanteNombre) {
-                return alert("El archivo CSV no contiene información válida de los equipos local o visitante en la sección 'Info'.");
+                return toast.error("El CSV no contiene información válida de los equipos en la sección 'Info'.");
             }
 
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -541,10 +574,20 @@ export default function Partidos() {
 
                 const titularVal = jug.rol === 'Titular' ? 1 : (jug.jugo ? 0 : 2);
                 const entrenadorId = eqId === localId ? entrenadorLocalId : entrenadorVisitanteId;
+                // Posición inicial real: para titulares se infiere de la posición registrada del perfil.
+                let posicionInicial: string | null = null;
+                let fuenteInicial: string | null = null;
+                if (titularVal === 1) {
+                    const posDb = await db.select<{ posicion_principal: string | null }[]>(
+                        "SELECT posicion_principal FROM Persona WHERE id = $1", [personaId]
+                    );
+                    posicionInicial = inferirPosicionInicial(posDb[0]?.posicion_principal);
+                    fuenteInicial = 'inferida';
+                }
                 await db.execute(`
-                    INSERT INTO Alineacion (partido_id, equipo_id, persona_id, titular, dorsal, posicion, es_capitan, entrenador_id)
-                    VALUES ($1, $2, $3, $4, $5, 'Jugador', 0, $6)
-                `, [partidoId, eqId, personaId, titularVal, jug.dorsal, entrenadorId]);
+                    INSERT INTO Alineacion (partido_id, equipo_id, persona_id, titular, dorsal, posicion, es_capitan, entrenador_id, posicion_inicial, fuente_posicion_inicial)
+                    VALUES ($1, $2, $3, $4, $5, 'Jugador', 0, $6, $7, $8)
+                `, [partidoId, eqId, personaId, titularVal, jug.dorsal, entrenadorId, posicionInicial, fuenteInicial]);
             }
 
             // Guardar entrenadores en la alineación también como convocados
@@ -632,11 +675,11 @@ export default function Partidos() {
             } else {
                 mensajeExito += `\n\n✅ Todos los jugadores, entrenadores y el estadio ya existían en la base de datos de forma correcta.`;
             }
-            alert(mensajeExito);
+            toast.success(mensajeExito);
 
         } catch (err: any) {
             console.error(err);
-            alert("Error al procesar e importar el partido: " + err.message);
+            toast.error("Error al procesar e importar el partido: " + err.message);
         } finally {
             setPartidoParaImportar(null);
         }
@@ -678,7 +721,7 @@ export default function Partidos() {
             setIsCalendarModalOpen(true);
         } catch (err: any) {
             console.error(err);
-            alert("Error al cargar equipos globales: " + err.message);
+            toast.error("Error al cargar equipos globales: " + err.message);
         }
     };
 
@@ -736,7 +779,7 @@ export default function Partidos() {
                     parsearTextoCalendario(fullText);
                 } catch (err: any) {
                     console.error(err);
-                    alert("Error al parsear el PDF: " + err.message);
+                    toast.error("Error al parsear el PDF: " + err.message);
                     setIsImportingCalendar(false);
                     setCalendarImportStep(1);
                 }
@@ -746,7 +789,7 @@ export default function Partidos() {
             
         } catch (err: any) {
             console.error(err);
-            alert("Error al cargar PDF.js: " + err.message);
+            toast.error("Error al cargar PDF.js: " + err.message);
             setIsImportingCalendar(false);
             setCalendarImportStep(1);
         } finally {
@@ -865,7 +908,7 @@ export default function Partidos() {
         }
 
         if (parsedMatches.length === 0) {
-            alert("No se pudo detectar ningún partido en el PDF. Por favor verifica que el formato sea el correcto.");
+            toast.warning("No se pudo detectar ningún partido en el PDF. Verifica el formato.");
             setIsImportingCalendar(false);
             setCalendarImportStep(1);
             return;
@@ -1037,7 +1080,7 @@ export default function Partidos() {
 
         } catch (err: any) {
             console.error(err);
-            alert("Error durante la importación del calendario: " + err.message);
+            toast.error("Error durante la importación del calendario: " + err.message);
             setCalendarImportStep(2);
         } finally {
             setIsImportingCalendar(false);
@@ -1065,24 +1108,14 @@ export default function Partidos() {
             await cargarFasesYEquipos(filtroEdicion);
             await cargarPartidos();
             setIsResetConfirmOpen(false);
-            alert("Se han eliminado todos los partidos y actas de esta edición correctamente. La edición está lista para importar el calendario PDF de nuevo. ✅");
+            toast.success("Edición reseteada: lista para importar el calendario PDF de nuevo.");
         } catch (err: any) {
             console.error(err);
-            alert("Error al resetear la edición: " + err.message);
+            toast.error("Error al resetear la edición: " + err.message);
         }
     };
 
     // --- FUNCIONES DB ---
-    async function cargarEdiciones() {
-        const db = await Database.load("sqlite:globalfutsal.db");
-        const res = await db.select<Selector[]>(`
-      SELECT e.id, c.nombre || ' (' || t.nombre || ')' || COALESCE(' - ' || e.nombre, '') as nombre
-      FROM Edicion e JOIN Competicion c ON e.competicion_id = c.id JOIN Temporada t ON e.temporada_id = t.id
-      ORDER BY t.fecha_inicio DESC
-    `);
-        setEdiciones(res);
-        if (res.length > 0 && !filtroEdicion) setFiltroEdicion(res[0].id.toString());
-    }
 
     async function cargarPabellones() {
         const db = await Database.load("sqlite:globalfutsal.db");
@@ -1174,7 +1207,7 @@ export default function Partidos() {
     // --- CRUD ---
     function abrirProgramar() {
         setEditingId(null);
-        setForm({
+        const inicial = {
             edicion: filtroEdicion,
             fase: filtroFase !== "todas" ? filtroFase : "",
             local: "", visitante: "", fecha: new Date().toISOString().split('T')[0], hora: "20:00",
@@ -1182,7 +1215,9 @@ export default function Partidos() {
             goles_local: 0, goles_visitante: 0, descanso_local: 0, descanso_visitante: 0,
             con_prorroga: false, penaltis_local: 0, penaltis_visitante: 0,
             jornada_texto: ""
-        });
+        };
+        setForm(inicial);
+        iniciar(inicial);
         setIsModalOpen(true);
     }
 
@@ -1210,12 +1245,33 @@ export default function Partidos() {
             penaltis_visitante: p.penaltis_visitante || 0,
             jornada_texto: p.jornada || ""
         });
+        iniciar({
+            edicion: p.edicion_id.toString(),
+            fase: p.fase_id?.toString() || "",
+            local: p.local_id.toString(),
+            visitante: p.visitante_id.toString(),
+            fecha: fecha, hora: hora,
+            pabellon: p.estadio_id?.toString() || "",
+            arbitro: p.arbitro_id?.toString() || "",
+            arbitro_2: p.arbitro_2_id?.toString() || "",
+            arbitro_3: p.arbitro_3_id?.toString() || "",
+            espectadores: p.espectadores || 0,
+            estado: p.estado,
+            goles_local: p.goles_local || 0,
+            goles_visitante: p.goles_visitante || 0,
+            descanso_local: p.goles_descanso_local || 0,
+            descanso_visitante: p.goles_descanso_visitante || 0,
+            con_prorroga: p.prorroga === 1,
+            penaltis_local: p.penaltis_local || 0,
+            penaltis_visitante: p.penaltis_visitante || 0,
+            jornada_texto: p.jornada || ""
+        });
         setIsModalOpen(true);
     }
 
-    async function guardar() {
-        if (!form.local || !form.visitante || !form.fecha) return alert("Faltan datos básicos");
-        if (form.local === form.visitante) return alert("El local y visitante no pueden ser el mismo");
+    async function guardar(): Promise<boolean> {
+        if (!form.local || !form.visitante || !form.fecha) { toast.warning("Faltan datos básicos del partido"); return false; }
+        if (form.local === form.visitante) { toast.warning("El local y visitante no pueden ser el mismo"); return false; }
 
         const fechaHora = `${form.fecha} ${form.hora}`;
         const parseId = (val: string) => val ? parseInt(val) : null;
@@ -1260,12 +1316,29 @@ export default function Partidos() {
             }
             setIsModalOpen(false);
             cargarPartidos();
-        } catch (e) { console.error(e); alert("Error al guardar"); }
+            return true;
+        } catch (e) {
+            console.error(e);
+            toast.error("Error al guardar el partido");
+            return false;
+        }
     }
 
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro(form, guardar)) setIsModalOpen(false);
+    };
+
     // --- CREACIÓN RÁPIDA ---
-    async function guardarEstadioRapido() {
-        if (!stadiumForm.nombre) return;
+    // --- PABELLÓN RÁPIDO (modal sobre "Datos del Partido", con guarda) ---
+    function abrirEstadioRapido() {
+        setStadiumForm({ nombre: "", ciudad: "" });
+        iniciarRapido({ nombre: "", ciudad: "" });
+        setIsStadiumModalOpen(true);
+    }
+
+    async function guardarEstadioRapido(): Promise<boolean> {
+        if (!stadiumForm.nombre) { toast.warning("Indica el nombre del pabellón"); return false; }
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             const res = await db.execute("INSERT INTO Estadio (nombre, ciudad) VALUES ($1, $2)", [stadiumForm.nombre, stadiumForm.ciudad]);
@@ -1274,13 +1347,33 @@ export default function Partidos() {
                 await cargarPabellones();
                 setForm(prev => ({ ...prev, pabellon: newId.toString() }));
             }
-            setIsStadiumModalOpen(false);
-            setStadiumForm({ nombre: "", ciudad: "" });
-        } catch (e) { console.error(e); }
+            return true;
+        } catch (e) {
+            console.error(e);
+            toast.error("No se pudo crear el pabellón");
+            return false;
+        }
+    }
+    const crearEstadioYCerrar = async () => {
+        if (await guardarEstadioRapido()) setIsStadiumModalOpen(false);
+    };
+    const cerrarEstadioSeguro = async () => {
+        if (await cerrarSeguroRapido(
+            { nombre: stadiumForm.nombre, ciudad: stadiumForm.ciudad },
+            guardarEstadioRapido,
+            { textoGuardar: "Crear y cerrar" }
+        )) setIsStadiumModalOpen(false);
+    };
+
+    // --- ÁRBITRO RÁPIDO (modal sobre "Datos del Partido", con guarda) ---
+    function abrirArbitroRapido() {
+        setRefereeForm({ nombre: "", apellidos: "", nombre_deportivo: "" });
+        iniciarRapido({ nombre: "", apellidos: "", nombre_deportivo: "" });
+        setIsRefereeModalOpen(true);
     }
 
-    async function guardarArbitroRapido() {
-        if (!refereeForm.nombre_deportivo) return;
+    async function guardarArbitroRapido(): Promise<boolean> {
+        if (!refereeForm.nombre_deportivo) { toast.warning("Indica el nombre deportivo del árbitro"); return false; }
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             const resP = await db.execute(
@@ -1296,10 +1389,23 @@ export default function Partidos() {
                 else if (!form.arbitro_3) setForm(prev => ({ ...prev, arbitro_3: personaId.toString() }));
                 else setForm(prev => ({ ...prev, arbitro: personaId.toString() }));
             }
-            setIsRefereeModalOpen(false);
-            setRefereeForm({ nombre: "", apellidos: "", nombre_deportivo: "" });
-        } catch (e) { console.error(e); }
+            return true;
+        } catch (e) {
+            console.error(e);
+            toast.error("No se pudo crear el árbitro");
+            return false;
+        }
     }
+    const crearArbitroYCerrar = async () => {
+        if (await guardarArbitroRapido()) setIsRefereeModalOpen(false);
+    };
+    const cerrarArbitroSeguro = async () => {
+        if (await cerrarSeguroRapido(
+            { nombre: refereeForm.nombre, apellidos: refereeForm.apellidos, nombre_deportivo: refereeForm.nombre_deportivo },
+            guardarArbitroRapido,
+            { textoGuardar: "Crear y cerrar" }
+        )) setIsRefereeModalOpen(false);
+    };
 
     function solicitarBorrarPartido(id: number, local: string, visitante: string) {
         setIdPartidoABorrar(id);
@@ -1309,20 +1415,10 @@ export default function Partidos() {
 
     async function ejecutarBorradoPartido() {
         if (!idPartidoABorrar) return;
-        try {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            await db.execute("DELETE FROM Alineacion WHERE partido_id = $1", [idPartidoABorrar]);
-            await db.execute("DELETE FROM Evento WHERE partido_id = $1", [idPartidoABorrar]);
-            await db.execute("DELETE FROM EstadisticaPartidoEquipo WHERE partido_id = $1", [idPartidoABorrar]);
-            await db.execute("DELETE FROM EstadisticaPartidoJugador WHERE partido_id = $1", [idPartidoABorrar]);
-            await db.execute("DELETE FROM Partido WHERE id = $1", [idPartidoABorrar]);
-            cargarPartidos();
+        const ok = await borrarPartidoFila(idPartidoABorrar, nombrePartidoABorrar);
+        if (ok) {
             setIsDeleteConfirmOpen(false);
             setIdPartidoABorrar(null);
-            alert("Partido eliminado correctamente ✅");
-        } catch (e) { 
-            console.error(e); 
-            alert("Error al borrar el partido"); 
         }
     }
 
@@ -1365,11 +1461,15 @@ export default function Partidos() {
                 <div className="flex-1 min-w-[200px]">
                     <label className="text-[10px] uppercase font-black tracking-wider text-silver/40 mb-1 block">Edición</label>
                     <select value={filtroEdicion} onChange={e => {
-                        setFiltroEdicion(e.target.value);
+                        const idStr = e.target.value;
+                        setFiltroEdicion(idStr);
                         setFiltroFase("todas");
                         setFiltroGrupo("todos");
+                        // Cambiar la edición aquí también la fija como edición activa global (sidebar).
+                        const ed = edicionesCtx.find(x => String(x.id) === idStr);
+                        if (ed) setEdicionActiva(ed);
                     }} className="w-full p-2.5 border border-white/10 rounded-xl bg-navy-light text-sm focus:ring-1 focus:ring-orange outline-none text-white cursor-pointer font-bold">
-                        {ediciones.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
+                        {edicionesCtx.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
                     </select>
                 </div>
                 <div className="w-64">
@@ -1448,7 +1548,7 @@ export default function Partidos() {
             </div>
 
             {/* MODAL */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title="Datos del Partido">
+            <Modal isOpen={isModalOpen} onClose={cerrarModalSeguro} title="Datos del Partido">
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4 bg-navy-dark/40 p-3 rounded-xl border border-white/5">
                         <div>
@@ -1479,7 +1579,7 @@ export default function Partidos() {
                             <input type="text" placeholder="Ej: 1, 2..." value={form.jornada_texto} onChange={e => setForm({ ...form, jornada_texto: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold text-center" />
                         </div>
                         <div className="col-span-2">
-                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider flex justify-between">Pabellón <button onClick={() => setIsStadiumModalOpen(true)} className="text-orange hover:underline text-[10px] font-black">+ NUEVO</button></label>
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider flex justify-between">Pabellón <button onClick={abrirEstadioRapido} className="text-orange hover:underline text-[10px] font-black">+ NUEVO</button></label>
                             <select value={form.pabellon} onChange={e => setForm({ ...form, pabellon: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="">-- Por definir --</option>
                                 {pabellones.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
@@ -1506,7 +1606,7 @@ export default function Partidos() {
                     </div>
                     <div className="grid grid-cols-3 gap-3">
                         <div>
-                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider flex justify-between">Árbitro 1 <button onClick={() => setIsRefereeModalOpen(true)} className="text-orange hover:underline text-[10px] font-black">+ NUEVO</button></label>
+                            <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider flex justify-between">Árbitro 1 <button onClick={abrirArbitroRapido} className="text-orange hover:underline text-[10px] font-black">+ NUEVO</button></label>
                             <select value={form.arbitro} onChange={e => setForm({ ...form, arbitro: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold cursor-pointer">
                                 <option value="">-- Por definir --</option>
                                 {arbitros.map(a => <option key={a.id} value={a.id}>{a.nombre}</option>)}
@@ -1571,13 +1671,13 @@ export default function Partidos() {
                         </div>
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
                         <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar Partido</button>
                     </div>
                 </div>
             </Modal>
 
-            <Modal isOpen={isStadiumModalOpen} onClose={() => setIsStadiumModalOpen(false)} title="Crear Pabellón rápido">
+            <Modal isOpen={isStadiumModalOpen} onClose={cerrarEstadioSeguro} title="Crear Pabellón rápido">
                 <div className="space-y-4 p-2">
                     <div>
                         <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre del Pabellón</label>
@@ -1587,11 +1687,11 @@ export default function Partidos() {
                         <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Ciudad (Opcional)</label>
                         <input value={stadiumForm.ciudad} onChange={e => setStadiumForm({ ...stadiumForm, ciudad: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors font-bold" placeholder="Ej: Nicosia" />
                     </div>
-                    <button onClick={guardarEstadioRapido} className="w-full bg-orange hover:bg-orange-hover text-white p-2.5 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] mt-2">Crear y Seleccionar</button>
+                    <button onClick={crearEstadioYCerrar} className="w-full bg-orange hover:bg-orange-hover text-white p-2.5 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] mt-2">Crear y Seleccionar</button>
                 </div>
             </Modal>
 
-            <Modal isOpen={isRefereeModalOpen} onClose={() => setIsRefereeModalOpen(false)} title="Crear Árbitro rápido">
+            <Modal isOpen={isRefereeModalOpen} onClose={cerrarArbitroSeguro} title="Crear Árbitro rápido">
                 <div className="space-y-4 p-2">
                     <div>
                         <label className="block text-xs font-bold text-silver/50 mb-1 uppercase tracking-wider">Nombre Deportivo (Apodo)</label>
@@ -1607,7 +1707,7 @@ export default function Partidos() {
                             <input value={refereeForm.apellidos} onChange={e => setRefereeForm({ ...refereeForm, apellidos: e.target.value })} className="w-full p-2.5 bg-navy border border-white/10 rounded-xl text-white outline-none focus:border-orange transition-colors" />
                         </div>
                     </div>
-                    <button onClick={guardarArbitroRapido} className="w-full bg-orange hover:bg-orange-hover text-white p-2.5 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] mt-2">Crear y Seleccionar</button>
+                    <button onClick={crearArbitroYCerrar} className="w-full bg-orange hover:bg-orange-hover text-white p-2.5 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98] mt-2">Crear y Seleccionar</button>
                     <p className="text-[10px] text-silver/40 font-medium italic text-center">Nota: Al crearlo se vinculará automáticamente a la edición actual.</p>
                 </div>
             </Modal>
@@ -1629,8 +1729,10 @@ export default function Partidos() {
             )}
 
             {/* MODAL PARA IMPORTAR CALENDARIO PDF */}
+            {/* Sin cierre por clic fuera: flujo largo en varios pasos; un clic perdido
+                no debe descartar el PDF seleccionado. Escape sigue respetando isImportingCalendar. */}
             {isCalendarModalOpen && (
-                <Modal isOpen={isCalendarModalOpen} onClose={() => !isImportingCalendar && setIsCalendarModalOpen(false)} title="Importar Calendario de Competición">
+                <Modal isOpen={isCalendarModalOpen} cerrarAlClicarFuera={false} onClose={() => !isImportingCalendar && setIsCalendarModalOpen(false)} title="Importar Calendario de Competición">
                     {calendarImportStep === 1 && (
                         <div className="space-y-4">
                             <p className="text-sm text-silver/80">
@@ -1763,7 +1865,7 @@ export default function Partidos() {
                 <Modal isOpen={isResetConfirmOpen} onClose={() => setIsResetConfirmOpen(false)} title="Resetear Edición de Competición">
                     <div className="space-y-4 text-white">
                         <p className="text-sm text-silver/80">
-                            ¿Estás completamente seguro de que deseas eliminar <strong className="text-red">TODOS los partidos</strong>, alineaciones y actas de esta edición?
+                            ¿Estás completamente seguro de que deseas eliminar <strong className="text-red">TODOS los partidos</strong>, alineaciones y actas de la edición <strong className="text-orange">{edicionActiva?.nombre || "actual"}</strong>?
                         </p>
                         <p className="text-xs text-red bg-red/10 border border-red/25 p-3 rounded-xl">
                             ⚠️ Esta acción borrará absolutamente todos los partidos del calendario (tanto programados como jugados) y sus estadísticas asociadas de forma irreversible en esta edición.
@@ -1775,6 +1877,15 @@ export default function Partidos() {
                     </div>
                 </Modal>
             )}
+            {dialogoConfirmar}
+            {dialogo}
+            {dialogoRapido}
+            <UndoToast
+                pendiente={partidoBorrado}
+                onUndo={deshacerBorradoPartido}
+                onDescartar={limpiarBorradoPartido}
+                mensaje={(b) => `Partido ${b.etiqueta || `#${b.partido.id}`} eliminado`}
+            />
         </div>
     );
 }

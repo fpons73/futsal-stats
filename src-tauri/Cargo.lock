@@ -1112,9 +1112,11 @@ dependencies = [
 name = "futsal-stats"
 version = "0.1.0"
 dependencies = [
+ "glob",
  "reqwest",
  "serde",
  "serde_json",
+ "sqlx",
  "tauri",
  "tauri-build",
  "tauri-plugin-dialog",

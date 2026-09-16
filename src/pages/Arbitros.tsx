@@ -1,10 +1,15 @@
 import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { open, ask } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Eye, Filter, Gavel, Upload, X, Calendar } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
+import { UndoToast } from "../components/UndoToast";
+import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
 import ImagenLocal from "../components/ImagenLocal";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useFormGuard } from "../hooks/useFormGuard";
 import { normalizeString } from "../utils/stringUtils";
 
 interface Pais {
@@ -50,6 +55,13 @@ export default function Arbitros() {
         foto: null as string | null
     });
 
+    // --- CAMBIOS SIN GUARDAR (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+    // Confirmación temática para acciones destructivas (sustituye a ask() nativo).
+    const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+    // Borrado con deshacer: instantánea antes del DELETE, re-INSERT al deshacer.
+    const { pendiente: filaBorrada, borrar: borrarFila, deshacer, clear: limpiarBorrado } = useBorradorConDeshacer("Persona", cargarDatos);
+
     useEffect(() => { cargarDatos(); }, []);
 
     async function cargarDatos() {
@@ -76,6 +88,7 @@ export default function Arbitros() {
     function abrirCrear() {
         setEditingId(null);
         setFormData({ nombre: "", apellidos: "", apodo: "", nacimiento: "", pais1: "", pais2: "", foto: null });
+        iniciar({ nombre: "", apellidos: "", apodo: "", nacimiento: "", pais1: "", pais2: "", foto: null });
         setModalFormOpen(true);
     }
 
@@ -96,6 +109,15 @@ export default function Arbitros() {
             pais2: nac2,
             foto: a.foto_path
         });
+        iniciar({
+            nombre: a.nombre,
+            apellidos: a.apellidos,
+            apodo: a.nombre_deportivo,
+            nacimiento: a.fecha_nacimiento,
+            pais1: a.nacionalidad_principal_id?.toString() || "",
+            pais2: nac2,
+            foto: a.foto_path
+        });
         setModalFormOpen(true);
     }
 
@@ -104,10 +126,15 @@ export default function Arbitros() {
         setModalViewOpen(true);
     }
 
-    async function guardar() {
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro(formData, guardar)) setModalFormOpen(false);
+    };
+
+    async function guardar(): Promise<boolean> {
         if (!formData.nombre || !formData.apodo || !formData.pais1) {
-            alert("Rellena nombre, apodo y nacionalidad.");
-            return;
+            toast.warning("Rellena nombre, apodo y nacionalidad.");
+            return false;
         }
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -131,16 +158,17 @@ export default function Arbitros() {
             }
             setModalFormOpen(false);
             cargarDatos();
-        } catch (error) { console.error("Error guardando:", error); }
+            return true;
+        } catch (error) {
+            console.error("Error guardando:", error);
+            toast.error("Error al guardar el árbitro");
+            return false;
+        }
     }
 
     async function borrar(id: number) {
-        const confirm = await ask("¿Eliminar árbitro?", { title: "Confirmar", kind: "warning", okLabel: "Sí", cancelLabel: "No" });
-        if (confirm) {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            await db.execute("DELETE FROM Persona WHERE id = $1", [id]);
-            cargarDatos();
-        }
+        const confirm = await confirmar({ mensaje: "¿Eliminar árbitro?", titulo: "Confirmar", textoConfirmar: "Sí", textoCancelar: "No", peligroso: true });
+        if (confirm) await borrarFila(id);
     }
 
     function calcularEdad(fecha: string) {
@@ -252,7 +280,7 @@ export default function Arbitros() {
             </div>
 
             {/* --- MODAL FORMULARIO --- */}
-            <Modal isOpen={modalFormOpen} onClose={() => setModalFormOpen(false)} title={editingId ? "Editar Árbitro" : "Nuevo Árbitro"}>
+            <Modal isOpen={modalFormOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Árbitro" : "Nuevo Árbitro"}>
                 <div className="space-y-4 text-white">
 
                     <div className="flex items-center gap-4 mb-4">
@@ -327,7 +355,7 @@ export default function Arbitros() {
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setModalFormOpen(false)} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-4 py-2 text-silver/50 hover:text-white transition-colors text-sm font-bold uppercase tracking-wider">Cancelar</button>
                         <button onClick={guardar} className="bg-gradient-to-r from-orange to-orange-neon text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange">Guardar</button>
                     </div>
                 </div>
@@ -370,6 +398,17 @@ export default function Arbitros() {
                     </div>
                 </div>
             )}
+
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
+            {/* Diálogo de confirmación destructiva */}
+            {dialogoConfirmar}
+            <UndoToast
+                pendiente={filaBorrada}
+                onUndo={deshacer}
+                onDescartar={limpiarBorrado}
+                mensaje={(f) => `Árbitro ${f.nombre_deportivo || f.nombre} eliminado`}
+            />
         </div>
     );
 }

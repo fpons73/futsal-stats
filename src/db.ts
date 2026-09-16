@@ -6,60 +6,13 @@ export async function iniciarBaseDeDatos() {
   try {
     const db = await Database.load(DB_NAME);
 
-    // Migraciones ALTER TABLE que pueden fallar si ya existen (idempotentes)
-    const migraciones = [
-      // Columnas de tiempo
-      "ALTER TABLE Partido ADD COLUMN descuento_1 INTEGER DEFAULT 0",
-      "ALTER TABLE Partido ADD COLUMN descuento_2 INTEGER DEFAULT 0",
-      "ALTER TABLE Evento ADD COLUMN minuto_extra INTEGER DEFAULT 0",
-      // Estadisticas extendidas de equipo
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN pases_totales INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN pases_precisos INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN centros_totales INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN centros_buenos INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN entradas_totales INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN entradas_ganadas INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN despejes INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN intercepciones INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN recuperaciones INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN duelos_ganados INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN duelos_perdidos INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN paradas INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN saques_banda INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN faltas_recibidas INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN balones_perdidos INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN saques_puerta INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN punos INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN faltas_acumulativas INTEGER DEFAULT 0",
-      "ALTER TABLE EstadisticaPartidoEquipo ADD COLUMN puntos_sofa REAL DEFAULT 0.0",
-      // Partido extendido
-      "ALTER TABLE Partido ADD COLUMN goles_1_prorroga_local INTEGER DEFAULT 0",
-      "ALTER TABLE Partido ADD COLUMN goles_1_prorroga_visitante INTEGER DEFAULT 0",
-      "ALTER TABLE Partido ADD COLUMN goles_2_prorroga_local INTEGER DEFAULT 0",
-      "ALTER TABLE Partido ADD COLUMN goles_2_prorroga_visitante INTEGER DEFAULT 0",
-      "ALTER TABLE Partido ADD COLUMN formacion_local TEXT DEFAULT ''",
-      "ALTER TABLE Partido ADD COLUMN formacion_visitante TEXT DEFAULT ''",
-      "ALTER TABLE Partido ADD COLUMN metadata TEXT",
-      // Rating en alineacion
-      "ALTER TABLE Alineacion ADD COLUMN rating REAL DEFAULT 0",
-      // Mejoras adicionales
-      "ALTER TABLE Equipo ADD COLUMN equipo_principal_id INTEGER",
-      "ALTER TABLE Competicion ADD COLUMN color1 TEXT",
-      "ALTER TABLE Competicion ADD COLUMN color2 TEXT",
-      "ALTER TABLE Competicion ADD COLUMN ambito TEXT DEFAULT 'Clubes'",
-      "ALTER TABLE Estadio ADD COLUMN anio_construccion INTEGER",
-      "ALTER TABLE Estadio ADD COLUMN dimensiones TEXT",
-    ];
-
-    for (const sql of migraciones) {
-      try {
-        await db.execute(sql);
-      } catch (e) {
-        // Ignorar si la columna ya existe
-      }
-    }
+    // NOTA: el esquema lo gestionan EXCLUSIVAMENTE las migraciones Rust
+    // (src-tauri/migrations/*.sql, ejecutadas por tauri-plugin-sql en el load).
+    // No añadir ALTER TABLE aquí: duplicar DDL entre frontend y migraciones
+    // provoca deriva de esquema y fallos de checksum al arrancar.
 
     // Crear tabla Formacion si no existe e insertar formaciones de futsal
+    // (red de seguridad idempotente; la vía canónica es la migración 8)
     try {
       await db.execute("CREATE TABLE IF NOT EXISTS Formacion (id INTEGER PRIMARY KEY AUTOINCREMENT, nombre TEXT NOT NULL)");
       const conteo = await db.select<any[]>("SELECT count(*) as c FROM Formacion");

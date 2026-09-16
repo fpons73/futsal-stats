@@ -1,9 +1,14 @@
 import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { open, ask } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core"; // <--- USAMOS ESTO QUE ES LO QUE FUNCIONA
 import { Plus, Trophy, Trash2, Edit, Upload, X } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
+import { UndoToast } from "../components/UndoToast";
+import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useFormGuard } from "../hooks/useFormGuard";
 // Ya no importamos ImagenLocal
 
 interface Competicion {
@@ -41,6 +46,13 @@ export default function Competiciones() {
     const [seleccionId, setSeleccionId] = useState<string>("");
     const [logoPath, setLogoPath] = useState<string | null>(null);
 
+    // --- CAMBIOS SIN GUARDAR (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+    // Confirmación temática para acciones destructivas (sustituye a ask() nativo).
+    const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+    // Borrado con deshacer: instantánea antes del DELETE, re-INSERT al deshacer.
+    const { pendiente: filaBorrada, borrar: borrarFila, deshacer, clear: limpiarBorrado } = useBorradorConDeshacer("Competicion", cargarDatos);
+
     useEffect(() => { cargarDatos(); }, []);
 
     async function cargarDatos() {
@@ -69,6 +81,7 @@ export default function Competiciones() {
     function abrirCrear() {
         setEditingId(null);
         setNombre(""); setTipo("Liga"); setAmbito("nacional"); setSeleccionId(""); setLogoPath(null);
+        iniciar({ nombre: "", tipo: "Liga", ambito: "nacional", seleccionId: "", logoPath: null });
         setIsModalOpen(true);
     }
 
@@ -88,13 +101,14 @@ export default function Competiciones() {
             setAmbito("nacional");
             setSeleccionId("");
         }
+        iniciar({ nombre: c.nombre, tipo: c.tipo, ambito: c.pais_id ? "nacional" : (c.confederacion_id ? "internacional" : "nacional"), seleccionId: c.pais_id ? c.pais_id.toString() : (c.confederacion_id ? c.confederacion_id.toString() : ""), logoPath: c.logo_path });
         setIsModalOpen(true);
     }
 
-    async function guardar() {
+    async function guardar(): Promise<boolean> {
         if (!nombre || !seleccionId) {
-            alert("Faltan datos obligatorios");
-            return;
+            toast.warning("Faltan datos obligatorios");
+            return false;
         }
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -114,16 +128,22 @@ export default function Competiciones() {
             }
             setIsModalOpen(false);
             cargarDatos();
-        } catch (error) { console.error(error); }
+            return true;
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al guardar la competición");
+            return false;
+        }
+    }
+
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro({ nombre, tipo, ambito, seleccionId, logoPath }, guardar)) setIsModalOpen(false);
     }
 
     async function borrar(id: number) {
-        const confirm = await ask("¿Eliminar competición?", { title: "Confirmar", kind: "warning", okLabel: "Sí", cancelLabel: "No" });
-        if (confirm) {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            await db.execute("DELETE FROM Competicion WHERE id = $1", [id]);
-            cargarDatos();
-        }
+        const confirm = await confirmar({ mensaje: "¿Eliminar competición?", titulo: "Confirmar", textoConfirmar: "Sí", textoCancelar: "No", peligroso: true });
+        if (confirm) await borrarFila(id);
     }
 
     return (
@@ -192,7 +212,7 @@ export default function Competiciones() {
             </div>
 
             {/* MODAL */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Competición" : "Nueva Competición"}>
+            <Modal isOpen={isModalOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Competición" : "Nueva Competición"}>
                 <div className="space-y-4">
                     <div className="flex justify-center">
                         <div
@@ -250,11 +270,22 @@ export default function Competiciones() {
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
                         <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>
+
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
+            {/* Diálogo de confirmación destructiva */}
+            {dialogoConfirmar}
+            <UndoToast
+                pendiente={filaBorrada}
+                onUndo={deshacer}
+                onDescartar={limpiarBorrado}
+                mensaje={(f) => `Competición ${f.nombre} eliminada`}
+            />
         </div>
     );
 }

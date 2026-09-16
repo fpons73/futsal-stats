@@ -20,7 +20,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     async function cargarTemaInicial() {
       const saved = await getPreferencia("theme");
       if (saved === "dark" || saved === "light") {
-        setTheme(saved as Theme);
+        // No deshacer un cambio más reciente hecho ya desde la UI (localStorage manda si difiere).
+        const local = localStorage.getItem("theme");
+        if (local === saved) setTheme(saved as Theme);
       }
     }
     cargarTemaInicial();
@@ -30,6 +32,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const root = window.document.documentElement;
     root.classList.remove("light", "dark");
     root.classList.add(theme);
+    // setPreferencia escribe localStorage de forma síncrona antes del insert en BD,
+    // de modo que el próximo arranque (main.tsx) lee el tema correcto sin destello.
     setPreferencia("theme", theme);
   }, [theme]);
 

@@ -1,8 +1,12 @@
 import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { ask } from "@tauri-apps/plugin-dialog";
 import { Plus, ListOrdered, Trash2, Edit, Filter } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
+import { UndoToast } from "../components/UndoToast";
+import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useFormGuard } from "../hooks/useFormGuard";
 
 // Tipos de datos
 interface Fase {
@@ -34,6 +38,13 @@ export default function Fases() {
     const [orden, setOrden] = useState(1);
     const [tipo, setTipo] = useState("Liga");
     const [formato, setFormato] = useState(0); // 0: Único, 1: Ida/Vuelta
+
+    // --- CAMBIOS SIN GUARDAR (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+    // Confirmación temática para acciones destructivas (sustituye a ask()/message() nativos).
+    const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+    // Borrado con deshacer: instantánea antes del DELETE, re-INSERT al deshacer.
+    const { pendiente: filaBorrada, borrar: borrarFila, deshacer, clear: limpiarBorrado } = useBorradorConDeshacer("Fase", () => cargarFases(parseInt(edicionSeleccionada)));
 
     // 1. CARGAR EDICIONES AL INICIO
     useEffect(() => {
@@ -93,7 +104,7 @@ export default function Fases() {
 
     function abrirCrear() {
         if (!edicionSeleccionada) {
-            alert("Primero selecciona una edición.");
+            toast.warning("Primero selecciona una edición.");
             return;
         }
         setEditingId(null);
@@ -101,6 +112,7 @@ export default function Fases() {
         // Mantenemos el orden calculado
         setTipo("Liga");
         setFormato(0);
+        iniciar({ nombre: `Jornada ${orden}`, orden, tipo: "Liga", formato: 0 });
         setIsModalOpen(true);
     }
 
@@ -110,11 +122,12 @@ export default function Fases() {
         setOrden(f.orden);
         setTipo(f.tipo);
         setFormato(f.ida_vuelta);
+        iniciar({ nombre: f.nombre, orden: f.orden, tipo: f.tipo, formato: f.ida_vuelta });
         setIsModalOpen(true);
     }
 
-    async function guardar() {
-        if (!nombre) return;
+    async function guardar(): Promise<boolean> {
+        if (!nombre) return false;
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
 
@@ -131,16 +144,22 @@ export default function Fases() {
             }
             setIsModalOpen(false);
             cargarFases(parseInt(edicionSeleccionada));
-        } catch (error) { console.error(error); }
+            return true;
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al guardar la fase");
+            return false;
+        }
+    }
+
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro({ nombre, orden, tipo, formato }, guardar)) setIsModalOpen(false);
     }
 
     async function borrar(id: number) {
-        const confirm = await ask("¿Eliminar esta fase/jornada?", { title: "Atención", kind: "warning", okLabel: "Borrar", cancelLabel: "Cancelar" });
-        if (confirm) {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            await db.execute("DELETE FROM Fase WHERE id = $1", [id]);
-            cargarFases(parseInt(edicionSeleccionada));
-        }
+        const confirm = await confirmar({ mensaje: "¿Eliminar esta fase/jornada?", titulo: "Atención", textoConfirmar: "Borrar", textoCancelar: "Cancelar", peligroso: true });
+        if (confirm) await borrarFila(id);
     }
 
     return (
@@ -223,7 +242,7 @@ export default function Fases() {
             </div>
 
             {/* MODAL */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Fase" : "Nueva Fase"}>
+            <Modal isOpen={isModalOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Fase" : "Nueva Fase"}>
                 <div className="space-y-4">
 
                     <div className="grid grid-cols-4 gap-4">
@@ -256,12 +275,22 @@ export default function Fases() {
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
                         <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>
 
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
+            {/* Diálogo de confirmación destructiva */}
+            {dialogoConfirmar}
+            <UndoToast
+                pendiente={filaBorrada}
+                onUndo={deshacer}
+                onDescartar={limpiarBorrado}
+                mensaje={(f) => `Fase ${f.nombre} eliminada`}
+            />
         </div>
     );
 }

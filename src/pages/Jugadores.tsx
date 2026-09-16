@@ -3,8 +3,10 @@ import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Eye, Filter, User, Upload, X, Calendar } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
 import ImagenLocal from "../components/ImagenLocal";
+import { useFormGuard } from "../hooks/useFormGuard";
 import { normalizeString } from "../utils/stringUtils";
 
 // Definición de posiciones de Futsal
@@ -60,6 +62,9 @@ export default function Jugadores() {
         foto: null as string | null
     });
 
+    // --- CAMBIOS SIN GUARDAR (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+
     useEffect(() => { cargarDatos(); }, []);
 
     async function cargarDatos() {
@@ -86,6 +91,7 @@ export default function Jugadores() {
     function abrirCrear() {
         setEditingId(null);
         setFormData({ nombre: "", apellidos: "", apodo: "", nacimiento: "", pais1: "", pais2: "", pos1: "Ala", pos2: "", foto: null });
+        iniciar({ nombre: "", apellidos: "", apodo: "", nacimiento: "", pais1: "", pais2: "", pos1: "Ala", pos2: "", foto: null });
         setModalFormOpen(true);
     }
 
@@ -108,6 +114,17 @@ export default function Jugadores() {
             pos2: j.posiciones_secundarias || "", // CORREGIDO: Plural
             foto: j.foto_path
         });
+        iniciar({
+            nombre: j.nombre,
+            apellidos: j.apellidos,
+            apodo: j.nombre_deportivo,
+            nacimiento: j.fecha_nacimiento,
+            pais1: j.nacionalidad_principal_id?.toString() || "",
+            pais2: nac2,
+            pos1: j.posicion_principal,
+            pos2: j.posiciones_secundarias || "",
+            foto: j.foto_path
+        });
         setModalFormOpen(true);
     }
 
@@ -116,10 +133,15 @@ export default function Jugadores() {
         setModalViewOpen(true);
     }
 
-    async function guardar() {
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro(formData, guardar)) setModalFormOpen(false);
+    };
+
+    async function guardar(): Promise<boolean> {
         if (!formData.nombre || !formData.apodo || !formData.pais1) {
-            alert("Rellena los campos obligatorios (Nombre, Apodo, País)");
-            return;
+            toast.warning("Rellena los campos obligatorios (Nombre, Apodo, País)");
+            return false;
         }
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -145,7 +167,12 @@ export default function Jugadores() {
             }
             setModalFormOpen(false);
             cargarDatos();
-        } catch (error) { console.error("Error guardando:", error); }
+            return true;
+        } catch (error) {
+            console.error("Error guardando:", error);
+            toast.error("Error al guardar el jugador");
+            return false;
+        }
     }
 
     function solicitarBorrarJugador(j: Jugador) {
@@ -313,7 +340,7 @@ export default function Jugadores() {
                 {jugadoresFiltrados.length === 0 && <div className="p-10 text-center text-silver/40 font-medium">No se encontraron jugadores.</div>}
             </div>
 
-            <Modal isOpen={modalFormOpen} onClose={() => setModalFormOpen(false)} title={editingId ? "Editar Jugador" : "Nuevo Jugador"}>
+            <Modal isOpen={modalFormOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Jugador" : "Nuevo Jugador"}>
                 <div className="space-y-4">
                     <div className="flex items-center gap-4 mb-4">
                         <div onClick={seleccionarFoto} className="w-20 h-20 rounded-full bg-navy-dark border border-white/10 flex items-center justify-center cursor-pointer hover:border-orange overflow-hidden relative shadow-inner">
@@ -371,7 +398,7 @@ export default function Jugadores() {
                         </select>
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={() => setModalFormOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
                         <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
@@ -433,6 +460,8 @@ export default function Jugadores() {
                     </div>
                 </Modal>
             )}
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
         </div>
     );
 }

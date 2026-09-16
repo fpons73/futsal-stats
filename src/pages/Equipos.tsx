@@ -1,10 +1,15 @@
 import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { open, ask } from "@tauri-apps/plugin-dialog";
+import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Upload, Shield, Filter, X } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
+import { UndoToast } from "../components/UndoToast";
+import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
 import { normalizeString } from "../utils/stringUtils";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useFormGuard } from "../hooks/useFormGuard";
 
 // Interfaces
 interface Equipo {
@@ -39,6 +44,22 @@ export default function Equipos() {
     // Modal
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingId, setEditingId] = useState<number | null>(null);
+
+    // --- CAMBIOS SIN GUARDAR EN EL FORMULARIO (useFormGuard) ---
+    // Instantánea al abrir el modal; al cerrar con cambios se ofrece
+    // Guardar y cerrar / Descartar / Seguir editando.
+    const { iniciar, cerrarSeguro, dialogo } = useFormGuard();
+    // Confirmación temática para acciones destructivas (sustituye a ask() nativo).
+    const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+    // Borrado con deshacer: instantánea antes del DELETE, re-INSERT al deshacer.
+    const { pendiente: filaBorrada, borrar: borrarFila, deshacer, clear: limpiarBorrado } = useBorradorConDeshacer("Equipo", cargarDatos);
+    const valoresFormulario = () => ({
+        nombre, abreviatura, categoria, selPais, escudoPath, color1, color2
+    });
+    const cerrarModalSeguro = async () => {
+        const ok = await cerrarSeguro(valoresFormulario(), guardar);
+        if (ok) setIsModalOpen(false);
+    };
 
     // Formulario
     const [nombre, setNombre] = useState("");
@@ -89,6 +110,7 @@ export default function Equipos() {
         setEditingId(null);
         setNombre(""); setAbreviatura(""); setCategoria("Club"); setSelPais("");
         setEscudoPath(null); setColor1("#1F2E5C"); setColor2("#FFFFFF");
+        iniciar({ nombre: "", abreviatura: "", categoria: "Club", selPais: "", escudoPath: null, color1: "#1F2E5C", color2: "#FFFFFF" });
         setIsModalOpen(true);
     }
 
@@ -101,11 +123,12 @@ export default function Equipos() {
         setEscudoPath(e.escudo_path);
         setColor1(e.color1 || "#ffffff");
         setColor2(e.color2 || "#000000");
+        iniciar({ nombre: e.nombre, abreviatura: e.abreviatura, categoria: e.categoria, selPais: e.pais_id?.toString() || "", escudoPath: e.escudo_path, color1: e.color1 || "#ffffff", color2: e.color2 || "#000000" });
         setIsModalOpen(true);
     }
 
-    async function guardar() {
-        if (!nombre || !selPais) { alert("El nombre y el país son obligatorios"); return; }
+    async function guardar(): Promise<boolean> {
+        if (!nombre || !selPais) { toast.warning("El nombre y el país son obligatorios"); return false; }
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
             const paisId = selPais ? parseInt(selPais) : null;
@@ -123,16 +146,17 @@ export default function Equipos() {
             }
             setIsModalOpen(false);
             cargarDatos();
-        } catch (error) { console.error(error); }
+            return true;
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al guardar el equipo");
+            return false;
+        }
     }
 
     async function borrar(id: number) {
-        const confirm = await ask("¿Eliminar equipo?", { title: "Confirmar", kind: "warning", okLabel: "Sí", cancelLabel: "No" });
-        if (confirm) {
-            const db = await Database.load("sqlite:globalfutsal.db");
-            await db.execute("DELETE FROM Equipo WHERE id = $1", [id]);
-            cargarDatos();
-        }
+        const confirm = await confirmar({ mensaje: "¿Eliminar equipo?", titulo: "Confirmar", textoConfirmar: "Sí", textoCancelar: "No", peligroso: true });
+        if (confirm) await borrarFila(id);
     }
 
     // --- LÓGICA DE FILTRADO ---
@@ -260,7 +284,7 @@ export default function Equipos() {
             </div>
 
             {/* MODAL */}
-            <Modal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingId ? "Editar Equipo" : "Nuevo Equipo"}>
+            <Modal isOpen={isModalOpen} onClose={cerrarModalSeguro} title={editingId ? "Editar Equipo" : "Nuevo Equipo"}>
                 <div className="space-y-4">
 
                     <div className="flex justify-center mb-4">
@@ -316,12 +340,22 @@ export default function Equipos() {
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5 mt-4">
-                        <button onClick={() => setIsModalOpen(false)} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
                         <button onClick={guardar} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>
 
+            {/* Diálogo de cambios sin guardar del formulario */}
+            {dialogo}
+            {/* Diálogo de confirmación destructiva */}
+            {dialogoConfirmar}
+            <UndoToast
+                pendiente={filaBorrada}
+                onUndo={deshacer}
+                onDescartar={limpiarBorrado}
+                mensaje={(f) => `Equipo ${f.nombre} eliminado`}
+            />
         </div>
     );
 }

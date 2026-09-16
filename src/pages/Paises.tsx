@@ -6,7 +6,10 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { join } from "@tauri-apps/api/path"; // Para unir rutas de carpetas
 import Papa from "papaparse"; // El lector de CSV
 import { Search, Upload, Plus, Trash2, Edit, Flag, FileSpreadsheet } from "lucide-react";
+import { toast } from "../components/Toast";
 import Modal from "../components/Modal";
+import { useConfirm } from "../components/ConfirmDialog";
+import { useFormGuard } from "../hooks/useFormGuard";
 
 interface Pais {
     id: number;
@@ -23,6 +26,9 @@ interface Confederacion {
 }
 
 export default function Paises() {
+    const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+    // --- CAMBIOS SIN GUARDAR EN EL FORMULARIO (useFormGuard) ---
+    const { iniciar, cerrarSeguro, dialogo: dialogoFormulario } = useFormGuard();
     const [paises, setPaises] = useState<Pais[]>([]);
     const [confederaciones, setConfederaciones] = useState<Confederacion[]>([]);
     const [busqueda, setBusqueda] = useState("");
@@ -103,7 +109,7 @@ export default function Paises() {
                     }
 
                     setLoading(false);
-                    alert(`¡Importación completada! Se han procesado ${cont} países.`);
+                    toast.success(`Importación completada: ${cont} países procesados.`);
                     cargarDatos();
                 }
             });
@@ -111,7 +117,7 @@ export default function Paises() {
         } catch (error) {
             console.error(error);
             setLoading(false);
-            alert("Error en la importación. Revisa la consola.");
+            toast.error("Error en la importación. Revisa la consola.");
         }
     }
 
@@ -126,51 +132,79 @@ export default function Paises() {
         } catch (err) { console.error(err); }
     }
 
-    async function guardarManual() {
+    async function guardarManual(): Promise<boolean> {
         if (!form.nombre || !form.iso2 || !form.iso3) {
-            alert("Nombre e ISOs son obligatorios");
-            return;
+            toast.warning("Nombre e ISOs son obligatorios");
+            return false;
         }
 
-        const db = await Database.load("sqlite:globalfutsal.db");
-        const iso2 = form.iso2.toUpperCase();
-        const iso3 = form.iso3.toUpperCase();
+        try {
+            const db = await Database.load("sqlite:globalfutsal.db");
+            const iso2 = form.iso2.toUpperCase();
+            const iso3 = form.iso3.toUpperCase();
 
-        if (editId) {
-            await db.execute(
-                "UPDATE Pais SET nombre=$1, codigo_iso2=$2, codigo_iso3=$3, confederacion_id=$4, bandera_path=$5 WHERE id=$6",
-                [form.nombre, iso2, iso3, form.conf_id || null, form.bandera || null, editId]
-            );
-        } else {
-            await db.execute(
-                "INSERT INTO Pais (nombre, codigo_iso2, codigo_iso3, confederacion_id, bandera_path) VALUES ($1, $2, $3, $4, $5)",
-                [form.nombre, iso2, iso3, form.conf_id || null, form.bandera || null]
-            );
+            if (editId) {
+                await db.execute(
+                    "UPDATE Pais SET nombre=$1, codigo_iso2=$2, codigo_iso3=$3, confederacion_id=$4, bandera_path=$5 WHERE id=$6",
+                    [form.nombre, iso2, iso3, form.conf_id || null, form.bandera || null, editId]
+                );
+            } else {
+                await db.execute(
+                    "INSERT INTO Pais (nombre, codigo_iso2, codigo_iso3, confederacion_id, bandera_path) VALUES ($1, $2, $3, $4, $5)",
+                    [form.nombre, iso2, iso3, form.conf_id || null, form.bandera || null]
+                );
+            }
+            cerrarModal();
+            cargarDatos();
+            return true;
+        } catch (error) {
+            console.error(error);
+            toast.error("Error al guardar el país");
+            return false;
         }
-        cerrarModal();
-        cargarDatos();
     }
 
     async function borrar(id: number) {
-        if (!confirm("¿Eliminar país?")) return;
+        const ok = await confirmar({
+            titulo: "Eliminar país",
+            mensaje: "¿Eliminar este país? Los equipos, competiciones y personas que lo usen quedarán sin país asignado.",
+            textoConfirmar: "Sí, eliminar",
+        });
+        if (!ok) return;
         const db = await Database.load("sqlite:globalfutsal.db");
         await db.execute("DELETE FROM Pais WHERE id=$1", [id]);
+        toast.success("País eliminado");
         cargarDatos();
+    }
+
+    function abrirCrear() {
+        setEditId(null);
+        const inicial = { nombre: "", iso2: "", iso3: "", conf_id: "", bandera: "" };
+        setForm(inicial);
+        iniciar(inicial);
+        setIsModalOpen(true);
     }
 
     function abrirEditar(p: Pais) {
         setEditId(p.id);
-        setForm({
+        const inicial = {
             nombre: p.nombre,
             iso2: p.codigo_iso2,
             iso3: p.codigo_iso3,
             conf_id: p.confederacion_id?.toString() || "",
             bandera: p.bandera_path || ""
-        });
+        };
+        setForm(inicial);
+        iniciar(inicial);
         setIsModalOpen(true);
     }
 
     function cerrarModal() { setIsModalOpen(false); setEditId(null); setForm({ nombre: "", iso2: "", iso3: "", conf_id: "", bandera: "" }); }
+
+    /** Cierre seguro: si el formulario difiere de su estado inicial, pregunta antes de perder los cambios. */
+    const cerrarModalSeguro = async () => {
+        if (await cerrarSeguro(form, guardarManual)) cerrarModal();
+    };
 
     // Filtrado de búsqueda
     const paisesFiltrados = paises.filter(p =>
@@ -200,7 +234,7 @@ export default function Paises() {
                         <span>{loading ? "Importando..." : "Importar CSV"}</span>
                     </button>
 
-                    <button onClick={() => setIsModalOpen(true)} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
+                    <button onClick={abrirCrear} className="bg-orange hover:bg-orange-hover text-white px-6 py-2.5 rounded-xl font-bold shadow-neon-orange flex items-center gap-2 transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">
                         <Plus size={20} /> <span>Nuevo</span>
                     </button>
                 </div>
@@ -266,7 +300,7 @@ export default function Paises() {
             </div>
 
             {/* MODAL EDICIÓN MANUAL */}
-            <Modal isOpen={isModalOpen} onClose={cerrarModal} title={editId ? "Editar País" : "Nuevo País"}>
+            <Modal isOpen={isModalOpen} onClose={cerrarModalSeguro} title={editId ? "Editar País" : "Nuevo País"}>
                 <div className="space-y-4">
                     <div className="flex flex-col items-center mb-2">
                         <label className="text-xs font-bold text-silver/50 mb-2 uppercase tracking-wider">Bandera</label>
@@ -315,12 +349,14 @@ export default function Paises() {
                         </select>
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t border-white/5">
-                        <button onClick={cerrarModal} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
+                        <button onClick={cerrarModalSeguro} className="px-5 py-2 text-silver/50 hover:text-white font-bold transition-colors">Cancelar</button>
                         <button onClick={guardarManual} className="bg-orange hover:bg-orange-hover text-white px-6 py-2 rounded-xl font-bold shadow-neon-orange transition-all duration-300 hover:scale-[1.02] active:scale-[0.98]">Guardar</button>
                     </div>
                 </div>
             </Modal>
 
+            {dialogoConfirmar}
+            {dialogoFormulario}
         </div>
     );
 }

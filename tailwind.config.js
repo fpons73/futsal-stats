@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 export default {
+  darkMode: "class",
   content: [
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
@@ -8,34 +9,36 @@ export default {
     extend: {
       colors: {
         // Paleta Oficial Global Futsal Stats
+        // navy/silver usan variables CSS: cambian de valor en tema claro (html.light)
+        // manteniendo la opacidad de cada uso (bg-navy/40, text-silver/70, ...).
         navy: {
-          DEFAULT: '#0B1F3B', // Azul Marino Profundo (Fondo principal)
-          light: '#16294a',   // Un poco más claro para filas alternas o hovers
-          dark: '#050f1e'     // Más oscuro para bordes
+          DEFAULT: 'rgb(var(--c-navy) / <alpha-value>)',
+          light: 'rgb(var(--c-navy-light) / <alpha-value>)',
+          dark: 'rgb(var(--c-navy-dark) / <alpha-value>)'
         },
         silver: {
-          DEFAULT: '#C9CED6', // Plateado Metálico (Textos)
-          dim: '#9ca3af',     // Plateado apagado (Textos secundarios)
+          DEFAULT: 'rgb(var(--c-silver) / <alpha-value>)',
+          dim: 'rgb(var(--c-silver-dim) / <alpha-value>)',
         },
         orange: {
-          DEFAULT: '#F28C28', // Naranja Energía (Botones principales)
-          hover: '#d97b1f',
-          neon: '#FF9F43'     // Naranja Neón brillante
+          DEFAULT: 'rgb(var(--c-orange) / <alpha-value>)',  // Naranja Energía (claro: ámbar oscuro legible)
+          hover: 'rgb(var(--c-orange-hover) / <alpha-value>)',
+          neon: 'rgb(var(--c-orange-neon) / <alpha-value>)'  // Naranja Neón brillante
         },
         red: {
-          DEFAULT: '#E04B3F', // Rojo Análisis (Alertas)
+          DEFAULT: 'rgb(var(--c-red) / <alpha-value>)', // Rojo Análisis (Alertas)
         },
         purple: {
           DEFAULT: '#6A3FA0', // Púrpura Datos (Gráficos/Filtros)
           light: '#8E44AD'
         },
         accent: {
-          blue: '#00D2FF',    // Azul Eléctrico
-          green: '#00F2FE'    // Verde Azulado brillante
+          blue: 'rgb(var(--c-accent-blue) / <alpha-value>)',   // Azul Eléctrico (claro: azul accesible)
+          green: 'rgb(var(--c-accent-green) / <alpha-value>)'  // Verde Azulado brillante
         },
-        // Estados
-        success: '#2ECC71',
-        warning: '#F1C40F',
+        // Estados (variables: legibles en ambos temas)
+        success: 'rgb(var(--c-success) / <alpha-value>)',
+        warning: 'rgb(var(--c-warning) / <alpha-value>)',
       },
       fontFamily: {
         sans: ['"Inter"', '"Segoe UI"', 'sans-serif'],

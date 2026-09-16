@@ -20,7 +20,7 @@ export function ValoracionesPartido({ partidoId, localId, visitanteId, localNomb
   async function cargarJugadores() {
     const db = await Database.load("sqlite:globalfutsal.db");
     const query = `
-      SELECT a.persona_id, a.dorsal, a.rating, a.titular, a.posicion, a.equipo_id,
+      SELECT a.persona_id, a.dorsal, a.rating, a.titular, COALESCE(a.posicion_inicial, a.posicion) as posicion, a.equipo_id,
              p.nombre_deportivo, p.foto_path, p.posicion_principal
       FROM Alineacion a
       JOIN Persona p ON a.persona_id = p.id

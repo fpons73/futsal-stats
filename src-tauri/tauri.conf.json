@@ -23,8 +23,7 @@
       "assetProtocol": {
         "enable": true,
         "scope": [
-          "$HOME/**",
-          "C:\\**"
+          "$HOME/**"
         ]
       }
     }
