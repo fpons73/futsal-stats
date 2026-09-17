@@ -325,8 +325,8 @@ async fn guardar_acta_transaccion(
             .await
             .map_err(|e| e.to_string())?;
 
-        insertar_equipo_acta(&mut *tx, partido_id, equipo_local, &filas_local).await?;
-        insertar_equipo_acta(&mut *tx, partido_id, equipo_visitante, &filas_visitante).await?;
+        insertar_equipo_acta(&mut tx, partido_id, equipo_local, &filas_local).await?;
+        insertar_equipo_acta(&mut tx, partido_id, equipo_visitante, &filas_visitante).await?;
 
         sqlx::query("UPDATE Partido SET formacion_local = ?1, formacion_visitante = ?2 WHERE id = ?3")
             .bind(&formacion_local)
