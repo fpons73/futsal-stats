@@ -51,3 +51,4 @@ logs_*.txt
 
 # Instaladores descargados para la prueba en VM (no versionar binarios)
 .rc-artifacts/
+sandbox-prueba/
