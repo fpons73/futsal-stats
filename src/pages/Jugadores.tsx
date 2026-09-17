@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Eye, Filter, User, Upload, X, Calendar, AlertTriangle } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import ImagenLocal from "../components/ImagenLocal";
 import { useFormGuard } from "../hooks/useFormGuard";
@@ -416,7 +417,25 @@ export default function Jugadores() {
                         })}
                     </tbody>
                 </table>
-                {jugadoresFiltrados.length === 0 && <div className="p-10 text-center text-silver/40 font-medium">No se encontraron jugadores.</div>}
+                {jugadoresFiltrados.length === 0 && (jugadores.length === 0 ? (
+                    <EstadoVacio
+                        icono={User}
+                        titulo="Aún no hay jugadores"
+                        descripcion="Importa la enciclopedia de jugadores (los CSV 1-5) o crea el primero a mano."
+                        acciones={[
+                            { texto: "Importar CSV", a: "/importar", primario: true },
+                            { texto: "Crear jugador", onClick: abrirCrear },
+                        ]}
+                    />
+                ) : (
+                    <EstadoVacio
+                        icono={Search}
+                        titulo="Ningún jugador coincide"
+                        descripcion="Prueba con otro nombre o quita los filtros de país, estado o nacionalidad."
+                        porFiltros
+                        acciones={[{ texto: "Limpiar búsqueda", onClick: () => { setBusqueda(""); setBusquedaInput(""); setFiltroPais("todos"); } }]}
+                    />
+                ))}
 
                 {/* PAGINACIÓN */}
                 {jugadoresFiltrados.length > POR_PAGINA && (

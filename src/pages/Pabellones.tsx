@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Upload, MapPin, Filter, X } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -229,7 +230,25 @@ export default function Pabellones() {
                         ))}
                     </tbody>
                 </table>
-                {pabellonesFiltrados.length === 0 && <div className="p-10 text-center text-silver/40 font-medium">No se encontraron pabellones.</div>}
+                {pabellonesFiltrados.length === 0 && (pabellones.length === 0 ? (
+                    <EstadoVacio
+                        icono={MapPin}
+                        titulo="Aún no hay pabellones"
+                        descripcion="Da de alta el pabellón donde juega cada equipo para asignarlo a los partidos."
+                        acciones={[
+                            { texto: "Crear pabellón", onClick: abrirCrear, primario: true },
+                            { texto: "Importar CSV", a: "/importar" },
+                        ]}
+                    />
+                ) : (
+                    <EstadoVacio
+                        icono={Search}
+                        titulo="Ningún pabellón coincide"
+                        descripcion="Prueba con otro nombre o quita el filtro de país."
+                        porFiltros
+                        acciones={[{ texto: "Limpiar búsqueda", onClick: () => { setBusqueda(""); setFiltroPais("todos"); } }]}
+                    />
+                ))}
             </div>
 
             {/* MODAL */}

@@ -4,6 +4,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { Shirt, Plus, Trash2, Edit, Search, User, Briefcase, ChevronRight, Download, Upload } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import { normalizeString } from "../utils/stringUtils";
 import { useFormGuard } from "../hooks/useFormGuard";
@@ -595,7 +596,13 @@ export default function Plantillas() {
                                 </div>
                             </div>
                         ))}
-                        {plantilla.length === 0 && <div className="text-center py-12 text-silver/30 font-semibold">No hay miembros inscritos en la plantilla.</div>}
+                        {plantilla.length === 0 && (
+                            <EstadoVacio
+                                icono={Shirt}
+                                titulo="Plantilla vacía"
+                                descripcion="Añade jugadores y entrenadores desde la lista de disponibles de la izquierda."
+                            />
+                        )}
                     </div>
                 </div>
             </div>

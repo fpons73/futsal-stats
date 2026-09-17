@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Upload, Shield, Filter, X, AlertTriangle } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -372,7 +373,24 @@ export default function Equipos() {
                         ))}
                     </tbody>
                 </table>
-                {equiposFiltrados.length === 0 && <div className="p-10 text-center text-silver/40 font-medium">No se encontraron equipos.</div>}
+                {equiposFiltrados.length === 0 && (equipos.length === 0 ? (
+                    <EstadoVacio
+                        icono={Shield}
+                        titulo="Aún no hay equipos"
+                        descripcion="Importa la enciclopedia de equipos desde un CSV o crea el primero a mano."
+                        acciones={[
+                            { texto: "Importar CSV", a: "/importar", primario: true },
+                            { texto: "Inscribir equipo", a: "/inscripcion-equipos" },
+                        ]}
+                    />
+                ) : (
+                    <EstadoVacio
+                        icono={Search}
+                        titulo="Ningún equipo coincide"                        descripcion="Prueba con otro nombre o quita los filtros de país."
+                        porFiltros
+                        acciones={[{ texto: "Limpiar búsqueda", onClick: () => { setBusqueda(""); setBusquedaInput(""); setFiltroPais("todos"); } }]}
+                    />
+                ))}
 
                 {/* PAGINACIÓN */}
                 {equiposFiltrados.length > POR_PAGINA && (

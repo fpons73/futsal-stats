@@ -7,6 +7,7 @@ import { join } from "@tauri-apps/api/path"; // Para unir rutas de carpetas
 import Papa from "papaparse"; // El lector de CSV
 import { Search, Upload, Plus, Trash2, Edit, Flag, FileSpreadsheet } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useFormGuard } from "../hooks/useFormGuard";
@@ -300,9 +301,25 @@ export default function Paises() {
                         ))}
                     </tbody>
                 </table>
-                {paisesFiltrados.length === 0 && (
-                    <div className="p-8 text-center text-silver/40 font-medium">No se encontraron países.</div>
-                )}
+                {paisesFiltrados.length === 0 && (paises.length === 0 ? (
+                    <EstadoVacio
+                        icono={Flag}
+                        titulo="Aún no hay países"
+                        descripcion="Los países nacionalizan equipos, jugadores y entrenadores. Cárgalos con los seeds o crea el primero."
+                        acciones={[
+                            { texto: "Crear país", onClick: abrirCrear, primario: true },
+                            { texto: "Cargar seeds", a: "/configuracion" },
+                        ]}
+                    />
+                ) : (
+                    <EstadoVacio
+                        icono={Search}
+                        titulo="Ningún país coincide"
+                        descripcion="Prueba con otro nombre."
+                        porFiltros
+                        acciones={[{ texto: "Limpiar búsqueda", onClick: () => setBusqueda("") }]}
+                    />
+                ))}
             </div>
 
             {/* MODAL EDICIÓN MANUAL */}

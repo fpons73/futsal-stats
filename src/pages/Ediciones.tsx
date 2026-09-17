@@ -3,6 +3,7 @@ import Database from "@tauri-apps/plugin-sql";
 import { convertFileSrc } from "@tauri-apps/api/core"; // <--- CLAVE
 import { Plus, Layers, Trash2, Edit, Save, Trophy } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -177,7 +178,14 @@ export default function Ediciones() {
                         </div>
                     </div>
                 ))}
-                {ediciones.length === 0 && <div className="col-span-full p-10 text-center text-silver/40 font-medium border border-white/5 bg-navy-dark/40 rounded-2xl shadow-inner">No hay ediciones creadas.</div>}
+                {ediciones.length === 0 && (
+                    <EstadoVacio
+                        icono={Layers}
+                        titulo="Aún no hay ediciones"
+                        descripcion="Crea la edición 2025-26 de tu competición para inscribir equipos y programar partidos."
+                        acciones={[{ texto: "Crear la primera", onClick: abrirCrear, primario: true }]}
+                    />
+                )}
             </div>
 
             {/* MODAL */}

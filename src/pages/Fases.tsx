@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
-import { Plus, ListOrdered, Trash2, Edit, Filter } from "lucide-react";
+import { Plus, ListOrdered, Trash2, Edit, Filter, Flag } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -243,7 +244,12 @@ export default function Fases() {
                 {!edicionSeleccionada ? (
                     <div className="p-10 text-center text-silver/40 font-medium">Selecciona una edición arriba para ver sus jornadas.</div>
                 ) : fases.length === 0 ? (
-                    <div className="p-10 text-center text-silver/40 font-medium">Esta edición no tiene fases creadas aún.</div>
+                    <EstadoVacio
+                        icono={Flag}
+                        titulo="Esta edición no tiene fases"
+                        descripcion="Crea al menos una fase (Liga, Playoff...) para empezar a programar partidos en ella."
+                        acciones={[{ texto: "Crear fase", onClick: abrirCrear, primario: true }]}
+                    />
                 ) : null}
             </div>
 

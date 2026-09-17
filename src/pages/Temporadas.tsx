@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { Plus, Calendar, Trash2, Edit, CalendarRange } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -158,11 +159,12 @@ export default function Temporadas() {
                 ))}
 
                 {temporadas.length === 0 && (
-                    <div className="col-span-full text-center py-10 text-silver/40 border border-white/5 bg-navy-dark/40 rounded-2xl shadow-inner">
-                        <CalendarRange size={48} className="mx-auto mb-4 opacity-30 text-silver/40" />
-                        <p className="font-bold">No hay temporadas registradas.</p>
-                        <button onClick={abrirCrear} className="text-orange font-bold mt-2 hover:underline">Crear la primera</button>
-                    </div>
+                    <EstadoVacio
+                        icono={CalendarRange}
+                        titulo="Aún no hay temporadas"
+                        descripcion="Las temporadas agrupan ediciones por año (2025-26, 2026-27...)."
+                        acciones={[{ texto: "Crear la primera", onClick: abrirCrear, primario: true }]}
+                    />
                 )}
             </div>
 

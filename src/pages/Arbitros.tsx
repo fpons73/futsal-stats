@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Eye, Filter, Gavel, Upload, X, Calendar } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -282,7 +283,25 @@ export default function Arbitros() {
                         })}
                     </tbody>
                 </table>
-                {arbitrosFiltrados.length === 0 && <div className="p-12 text-center text-silver/30 font-semibold">No se encontraron árbitros registrados.</div>}
+                {arbitrosFiltrados.length === 0 && (arbitros.length === 0 ? (
+                    <EstadoVacio
+                        icono={Gavel}
+                        titulo="Aún no hay árbitros"
+                        descripcion="Crea el colegiado primero o impórtalo desde CSV; después podrás designarlo para los partidos."
+                        acciones={[
+                            { texto: "Crear árbitro", onClick: abrirCrear, primario: true },
+                            { texto: "Importar CSV", a: "/importar" },
+                        ]}
+                    />
+                ) : (
+                    <EstadoVacio
+                        icono={Search}
+                        titulo="Ningún árbitro coincide"
+                        descripcion="Prueba con otro nombre o quita el filtro de país."
+                        porFiltros
+                        acciones={[{ texto: "Limpiar búsqueda", onClick: () => { setBusqueda(""); setFiltroPais("todos"); } }]}
+                    />
+                ))}
             </div>
 
             {/* --- MODAL FORMULARIO --- */}

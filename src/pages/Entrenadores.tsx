@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Eye, Filter, UserCog, Upload, X, Calendar, AlertTriangle, Trophy } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -392,7 +393,25 @@ export default function Entrenadores() {
                         })}
                     </tbody>
                 </table>
-                {entrenadoresFiltrados.length === 0 && <div className="p-10 text-center text-silver/40 font-medium">No se encontraron entrenadores.</div>}
+                {entrenadoresFiltrados.length === 0 && (entrenadores.length === 0 ? (
+                    <EstadoVacio
+                        icono={UserCog}
+                        titulo="Aún no hay entrenadores"
+                        descripcion="Importa la enciclopedia de entrenadores desde un CSV o crea el primero a mano."
+                        acciones={[
+                            { texto: "Importar CSV", a: "/importar", primario: true },
+                            { texto: "Crear entrenador", onClick: abrirCrear },
+                        ]}
+                    />
+                ) : (
+                    <EstadoVacio
+                        icono={Search}
+                        titulo="Ningún entrenador coincide"
+                        descripcion="Prueba con otro nombre o quita los filtros de país."
+                        porFiltros
+                        acciones={[{ texto: "Limpiar búsqueda", onClick: () => { setBusqueda(""); setBusquedaInput(""); setFiltroPais("todos"); } }]}
+                    />
+                ))}
 
                 {/* PAGINACIÓN */}
                 {entrenadoresFiltrados.length > POR_PAGINA && (

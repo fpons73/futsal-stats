@@ -8,6 +8,7 @@ import { useFormGuard } from "../hooks/useFormGuard";
 import Papa from "papaparse";
 import { inferirPosicionInicial } from "../utils/posiciones";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import { useConfirm } from "../components/ConfirmDialog";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorPartidoConDeshacer } from "../hooks/useBorradorPartidoConDeshacer";
@@ -1548,7 +1549,18 @@ export default function Partidos() {
                         </div>
                     </div>
                 ))}
-                {partidos.length === 0 && <div className="text-center py-12 text-silver/40 font-medium">No se encontraron partidos.</div>}
+                {partidos.length === 0 && (
+                    <EstadoVacio
+                        icono={Calendar}
+                        titulo="No hay partidos en esta edición"
+                        descripcion="Genera el calendario round-robin con un clic, impórtalo desde el CSV de la competición o crea el partido a mano."
+                        acciones={[
+                            { texto: "Generar calendario", a: "/importar", primario: true },
+                            { texto: "Importar calendario CSV", a: "/importar" },
+                        ]}
+                        extra="Consejo: inscribe primero los equipos de la edición en Inscripción."
+                    />
+                )}
             </div>
 
             {/* MODAL */}

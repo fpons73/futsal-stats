@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Globe, Trash2, Upload, Edit, X } from "lucide-react";
 import { toast } from "../components/Toast";
+import { EstadoVacio } from "../components/EstadoVacio";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -154,6 +155,17 @@ export default function Confederaciones() {
 
             {/* REJILLA DE TARJETAS */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {data.length === 0 && (
+                    <EstadoVacio
+                        icono={Globe}
+                        titulo="Aún no hay confederaciones"
+                        descripcion="Las confederaciones agrupan países y competiciones (UEFA, CONMEBOL...). Carga los seeds de futsal o crea la primera."
+                        acciones={[
+                            { texto: "Crear confederación", onClick: abrirCrear, primario: true },
+                            { texto: "Cargar seeds", a: "/configuracion" },
+                        ]}
+                    />
+                )}
                 {data.map((conf) => (
                     <div key={conf.id} className="glass-panel p-8 rounded-2xl border border-white/5 hover:border-white/10 hover:shadow-2xl transition-all duration-300 flex flex-col items-center text-center relative group">
 
