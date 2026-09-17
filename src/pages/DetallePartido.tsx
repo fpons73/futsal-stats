@@ -18,7 +18,6 @@ import { EstadisticasPartido } from "../components/EstadisticasPartido";
 import { EstadisticasJugadorPartido } from "../components/EstadisticasJugadorPartido";
 import { ValoracionesPartido } from "../components/ValoracionesPartido";
 import { TandaPenaltisPartido } from "../components/TandaPenaltisPartido";
-import { generarActaPartido } from "../utils/pdfGenerator";
 import { POSICIONES_INICIALES, inferirPosicionInicial, normalizarPosicion } from "../utils/posiciones";
 import { serializarBorrador, guardarBorrador, leerBorrador, borrarBorrador, fusionarBorrador, BorradorActa } from "../utils/actaDraft";
 
@@ -1031,6 +1030,8 @@ export default function DetallePartido() {
             const titularesVisitante = plantillaVisitante.filter(p => p.estado === 'titular');
             const entrenadoresLocal = plantillaLocal.filter(p => p.es_entrenador);
             const entrenadoresVisitante = plantillaVisitante.filter(p => p.es_entrenador);
+            // jsPDF (~350 kB) se descarga solo al exportar, no al arrancar la app.
+            const { generarActaPartido } = await import("../utils/pdfGenerator");
             await generarActaPartido(partido, titularesLocal, titularesVisitante, eventos, {}, paises, entrenadoresLocal, entrenadoresVisitante);
         } catch (e) {
             console.error(e);
