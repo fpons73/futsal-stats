@@ -17,6 +17,17 @@ it("marca prerelease las versiones con sufijo (rc/beta) y estables no", () => {
     expect(yaml).not.toMatch(/prerelease:\s*false/);
 });
 
+it("la plantilla de notas está orientada a usuario final", () => {
+    // Solo el bloque del cuerpo (NSIS sí aparece legítimamente en el nombre del job)
+    const cuerpo = yaml.match(/releaseBody: >\n([\s\S]*?)\n\s+releaseDraft:/)?.[1] ?? "";
+    expect(cuerpo).toContain("## Primer uso");
+    expect(cuerpo).toContain("Abre un issue");
+    expect(cuerpo).toContain("Más"); // aviso de SmartScreen explicado
+    // Sin jerga de desarrollador en las notas (lección de la revisión UX)
+    expect(cuerpo).not.toContain("Node ni Rust");
+    expect(cuerpo).not.toContain("NSIS");
+});
+
 it("compila en windows-latest y crea un borrador de Release", () => {
     expect(yaml).toContain("windows-latest");
     expect(yaml).toContain("tauri-apps/tauri-action@v0");
