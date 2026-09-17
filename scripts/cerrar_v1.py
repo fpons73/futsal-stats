@@ -5,6 +5,10 @@ validación en máquina limpia (sandbox-prueba/evidencias/resultado-fase-a.json)
 o si algún check de la Fase A/E falló. Es la regla del runbook convertida en
 herramienta: "no se etiqueta 1.0.0 sin esta validación".
 
+Excepción explícita: `--sin-validar` ejecuta el cierre sin evidencia (decisión
+solo del propietario). En ese caso el CHANGELOG registra la renuncia en lugar
+de dar la validación por hecha.
+
 Si la evidencia es válida:
   1. Bump cuádruple a 1.0.0 (tauri.conf.json, Cargo.toml, Cargo.lock,
      package.json).
@@ -38,8 +42,15 @@ def guardar(mensaje: str) -> None:
     sys.exit(1)
 
 
-def verificar_evidencia() -> dict:
+def verificar_evidencia(exento: bool) -> dict | None:
     print("== Guardia de validación (paso 1 del runbook) ==")
+    if exento:
+        print(
+            "  ⚠ EXENCIÓN (--sin-validar): cierre sin evidencia de validación "
+            "por decisión del propietario; quedará documentado en el hito y "
+            "el CHANGELOG."
+        )
+        return None
     if not EVIDENCIA.exists():
         guardar(
             f"sin evidencia en {EVIDENCIA.relative_to(RAIZ)}. "
@@ -122,12 +133,9 @@ def changelog() -> None:
     assert n == 1, "bloque [Sin publicar] no encontrado"
     print("  ✓ [Sin publicar] cerrado")
 
-    # 2. Renombrar la rc a la estable con fecha de hoy.
-    c, n = re.subn(
-        r"## \[1\.0\.0-rc\.1\] — 2026-09-17",
-        f"## [1.0.0] — {hoy}",
-        c, count=1,
-    )
+    # 2. Renombrar la PRIMERA cabecera rc (con fecha variable) a la estable.
+    patron = re.compile(r"## \[1\.0\.0-rc\.1\] — \d{4}-\d{2}-\d{2}")
+    c, n = patron.subn(f"## [1.0.0] — {hoy}", c, count=1)
     assert n == 1, "cabecera rc.1 no encontrada"
     print(f"  ✓ entrada [1.0.0] — {hoy}")
 
@@ -135,8 +143,15 @@ def changelog() -> None:
     rc_breve = (
         "## [1.0.0-rc.1] — 2026-09-17\n\n"
         "Candidata a release: contenido idéntico a la 1.0.0. Instalador NSIS "
-        "publicado como prerelease, validado en máquina limpia "
-        "([guía](docs/prueba-maquina-limpia.md)) antes del tag final.\n\n"
+        "publicado como prerelease. "
+        + (
+            "Validado en máquina limpia "
+            "([guía](docs/prueba-maquina-limpia.md)) antes del tag final.\n\n"
+            if EV_VALIDADA
+            else "La validación en máquina limpia "
+            "([guía](docs/prueba-maquina-limpia.md)) quedó **pendiente** al "
+            "etiquetar la 1.0.0, por decisión del propietario.\n\n"
+        )
     )
     c = c.replace(f"## [1.0.0] — {hoy}", rc_breve + f"## [1.0.0] — {hoy}", 1)
     print("  ✓ entrada rc.1 conservada")
@@ -145,8 +160,12 @@ def changelog() -> None:
     print("  ✓ CHANGELOG.md escrito")
 
 
+EV_VALIDADA = False
+
 if __name__ == "__main__":
-    verificar_evidencia()
+    exento = "--sin-validar" in sys.argv
+    if verificar_evidencia(exento):
+        EV_VALIDADA = True
     bump()
     changelog()
     print("\nListo. Pasos restantes (manuales, con los resultados reales):")

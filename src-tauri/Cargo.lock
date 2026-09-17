@@ -1110,7 +1110,7 @@ dependencies = [
 
 [[package]]
 name = "futsal-stats"
-version = "1.0.0-rc.1"
+version = "1.0.0"
 dependencies = [
  "glob",
  "reqwest",

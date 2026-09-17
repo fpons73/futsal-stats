@@ -4,27 +4,13 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y [Versionado Semántico](https://semver.org/lang/es/). Los detalles de cada
 tarea están en [`docs/milestone-1.0.md`](./docs/milestone-1.0.md).
 
-## [Sin publicar]
-
-### Preparación del cierre 1.0.0
-
-- Runbook de cierre de la 1.0.0 (`docs/cierre-v1-0-0.md`): validación en VM
-  del instalador de la rc (hash precalculado), bump de versión, regeneración
-  de notas y tag final con contingencia `rc.2`.
-- Workflow de release: los tags con sufijo (`-rc*`, `-beta*`) se publican
-  como **prerelease** automáticamente; las versiones estables no.
-- Release candidata **v1.0.0-rc.1 publicada como prerelease** con el
-  instalador NSIS descargable públicamente (SHA-256 verificado tras la
-  publicación con descarga anónima).
-
 ## [1.0.0-rc.1] — 2026-09-17
 
-## [1.0.0-rc.1] — 2026-09-17
+Candidata a release: contenido idéntico a la 1.0.0. Instalador NSIS publicado como prerelease. La validación en máquina limpia ([guía](docs/prueba-maquina-limpia.md)) quedó **pendiente** al etiquetar la 1.0.0, por decisión del propietario.
 
-Primera candidata a release: aplicación completa, instalable y con red de
-seguridad de datos. Pendiente para 1.0.0 final: prueba del instalador en
-máquina limpia ([guía](./docs/prueba-maquina-limpia.md)) y firma de código
-(post-1.0).
+## [1.0.0] — 2026-09-17
+
+Primera versión estable: aplicación completa, instalable y con red de seguridad de datos. Sin firma de código todavía (Windows mostrará el aviso de SmartScreen); la validación del instalador en máquina limpia quedó pendiente — ver la entrada de la rc.
 
 ### Añadido
 
@@ -69,7 +55,7 @@ máquina limpia ([guía](./docs/prueba-maquina-limpia.md)) y firma de código
 
 **Distribución**
 - Workflow de release en CI: cada tag `v*` compila el instalador Windows
-  (NSIS + MSI) y lo adjunta a un borrador de GitHub Release.
+  (NSIS) y lo adjunta a un borrador de GitHub Release.
 - Documentación de usuario (instalación, primer uso, solución de problemas) y
   de contribución (proceso de release).
 

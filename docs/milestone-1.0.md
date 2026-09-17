@@ -12,8 +12,8 @@
 
 | # | Tarea | Detalle | Verificación |
 |---|---|---|---|
-| 0.1 | **Bundle de producción en verde** | `npm run tauri build` → NSIS + MSI. Resolver lo que surja (iconos del bundle ya existen; `targets: all` puede fallar en firmas) | Instalador generado sin warnings bloqueantes; app arranca desde el .exe instalado |
-| 0.2 | **Prueba en máquina limpia** | VM o PC sin Rust/Node: instalar NSIS, importar un CSV, guardar un acta. **Guía con checklist ejecutable**: [`docs/prueba-maquina-limpia.md`](./prueba-maquina-limpia.md) | El flujo completo funciona sin entorno de desarrollo |
+| 0.1 | ✅ **Bundle de producción en verde** — HECHO: NSIS y MSI generados localmente y, desde `v1.0.0-rc.1`, NSIS generado en CI (workflow `release.yml` con `tauri-action`, success); MSI retirado del workflow por no soportar prereleases. App arranca desde el .exe instalado | Instalador generado sin warnings bloqueantes; app arranca desde el .exe instalado |
+| 0.2 | ⏸ **Prueba en máquina limpia — PENDIENTE post-tag** | VM o PC sin Rust/Node: instalar NSIS, importar un CSV, guardar un acta. **Guía con checklist ejecutable**: [`docs/prueba-maquina-limpia.md`](./prueba-maquina-limpia.md). Estado al etiquetar la 1.0.0 (17/09/2026): no ejecutada — Windows Sandbox quedó pendiente de reinicio en la máquina de desarrollo; el propietario decidió etiquetar sin ella (bypass `--sin-validar` del guard `scripts/cerrar_v1.py`). El instalador de CI es bit a bit el de la release publicada (SHA-256 `ba8df7fc…807a4a` verificado por descarga anónima); el E2E de primera instalación en BD virgen sí pasó en app viva. Ejecutar el checklist antes de difundir la app | El flujo completo funciona sin entorno de desarrollo |
 
 > **Nota 0.2**: la parte automatizable de la prueba en máquina limpia ya está hecha — el E2E de primera instalación (BD virgen → onboarding → importación completa → backup) pasó de extremo a extremo en app viva (17/09/2026). Queda la instalación del NSIS en VM sin Rust/Node siguiendo [`docs/prueba-maquina-limpia.md`](./prueba-maquina-limpia.md).
 | 0.3 | ✅ **Primera ejecución sin carpeta dev** — HECHO: `carpetaSugerida()` resuelve en build la raíz real del proyecto (dev, válida en cualquier máquina vía `__RAIZ_PROYECTO__`) o `Documentos\Global Futsal Stats` en producción | App nueva sin BD previa: onboarding de carpeta de datos OK |
@@ -22,10 +22,9 @@
 
 **Criterio de salida**: un instalador que otra persona instala y usa.
 
-**Cierre**: la rc `v1.0.0-rc.1` está etiquetada con instalador generado en CI;
-el paso a `1.0.0` final está documentado paso a paso en
-[`docs/cierre-v1-0-0.md`](./cierre-v1-0-0.md) (validación en VM → bump →
-notas → tag → publicación, con contingencia `rc.2`).
+**Cierre (17/09/2026)**: tag `v1.0.0` creado con instalador de CI; 0.1 HECHO,
+0.2 **pendiente post-tag por decisión del propietario** (ver fila 0.2). Proceso
+en [`docs/cierre-v1-0-0.md`](./cierre-v1-0-0.md).
 
 ## Bloque 1 — Primera experiencia y datos (3-4 días)
 
