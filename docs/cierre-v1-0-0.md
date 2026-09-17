@@ -59,6 +59,11 @@ Actualizar **las tres versiones + lock** (mismo procedimiento que la rc):
 
 Verificación: `cd src-tauri && cargo verify-project` y `npx tsc --noEmit`.
 
+> **Automatización (pasos 3 y 4)**: `python scripts/cerrar_v1.py` hace el
+> bump cuádruple y regenera el CHANGELOG — e incluye la **guardia del paso 1**:
+> se niega a versionar si no existe la evidencia de la validación
+> (`sandbox-prueba/evidencias/resultado-fase-a.json`) o si algún check falló.
+
 ## Paso 4 — Regenerar las notas de la 1.0.0
 
 En `CHANGELOG.md`:
