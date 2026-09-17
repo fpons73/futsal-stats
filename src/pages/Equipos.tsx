@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo } from "react";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { Escudo, Bandera } from "../components/ImagenSegura";
 import { Plus, Search, Trash2, Edit, Upload, Shield, Filter, X, AlertTriangle } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
+import SpinnerCarga from "../components/SpinnerCarga";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -47,6 +49,8 @@ export default function Equipos() {
     }, [busquedaInput]);
     const [filtroPais, setFiltroPais] = useState("todos");
     const [filtroCat, setFiltroCat] = useState("todos");
+    // Primera carga en curso: decide entre spinner / lista / estado vacío.
+    const [cargando, setCargando] = useState(true);
 
     // Paginación de render: con 18k equipos, montar todas las filas (cada una con
     // imágenes) congela la pestaña. Se pintan POR_PAGINA filas y se pagina.
@@ -107,6 +111,8 @@ export default function Equipos() {
         } catch (error) {
             console.error(error);
             toast.error("Error al cargar los equipos");
+        } finally {
+            setCargando(false);
         }
     }
 
@@ -328,12 +334,8 @@ export default function Equipos() {
                         {equiposVisibles.map((equipo) => (
                             <tr key={equipo.id} className="hover:bg-white/5 transition-colors group duration-200">
                                 <td className="p-3 text-center">
-                                    <div className="w-10 h-10 mx-auto flex items-center justify-center bg-white p-1 rounded-xl shadow-sm border border-white/10">
-                                        {equipo.escudo_path ? (
-                                            <img src={convertFileSrc(equipo.escudo_path)} className="max-w-full max-h-full object-contain filter drop-shadow-md" />
-                                        ) : (
-                                            <Shield className="text-silver/20" />
-                                        )}
+                                    <div className="w-10 h-10 mx-auto flex items-center justify-center bg-white p-1 rounded-xl shadow-sm border border-white/10 overflow-hidden">
+                                        <Escudo ruta={equipo.escudo_path} nombre={equipo.nombre} className="w-full h-full" />
                                     </div>
                                 </td>
                                 <td className="p-4 font-bold text-white group-hover:text-orange transition-colors">{equipo.nombre}</td>
@@ -348,7 +350,7 @@ export default function Equipos() {
                                             Sin país
                                         </span>
                                     ) : equipo.pais_bandera ? (
-                                        <img src={convertFileSrc(equipo.pais_bandera)} title={equipo.pais_nombre} className="w-6 h-4 object-cover border border-white/10 rounded-sm mx-auto shadow-sm" />
+                                        <Bandera ruta={equipo.pais_bandera} nombre={equipo.pais_nombre} className="w-6 h-4 mx-auto shadow-sm" />
                                     ) : (
                                         <span className="text-xs text-silver/30">-</span>
                                     )}
@@ -373,7 +375,9 @@ export default function Equipos() {
                         ))}
                     </tbody>
                 </table>
-                {equiposFiltrados.length === 0 && (equipos.length === 0 ? (
+                {cargando ? (
+                    <SpinnerCarga mensaje="Cargando equipos…" />
+                ) : equiposFiltrados.length === 0 && (equipos.length === 0 ? (
                     <EstadoVacio
                         icono={Shield}
                         titulo="Aún no hay equipos"
@@ -431,7 +435,7 @@ export default function Equipos() {
                             className="w-24 h-24 rounded-2xl border border-white/10 hover:border-orange cursor-pointer flex items-center justify-center bg-white overflow-hidden relative group shadow-inner"
                         >
                             {escudoPath ? (
-                                <img src={convertFileSrc(escudoPath)} className="w-full h-full object-contain p-2 filter drop-shadow-md" />
+                                <img src={convertFileSrc(escudoPath)} className="w-full h-full object-contain p-2 filter drop-shadow-md" onError={(e) => { e.currentTarget.style.visibility = "hidden"; }} />
                             ) : (
                                 <div className="text-center text-silver/40 group-hover:text-orange"><Shield size={24} className="mx-auto text-silver/30" /><span className="text-[10px] mt-1 block uppercase font-bold tracking-wider">Escudo</span></div>
                             )}

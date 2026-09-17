@@ -243,7 +243,7 @@ export default function DesignacionArbitros() {
                             <div key={arb.id} className="flex items-center justify-between p-2 hover:bg-white/5 rounded-xl group transition-all duration-200">
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-full bg-navy border border-white/10 overflow-hidden relative shadow-inner flex items-center justify-center">
-                                        <ImagenLocal path={arb.foto_path} alt="" className="w-full h-full object-cover" />
+                                        <ImagenLocal path={arb.foto_path} alt={arb.nombre_deportivo} className="w-full h-full object-cover" />
                                     </div>
                                     <span className="font-bold text-white group-hover:text-orange transition-colors text-sm">{arb.nombre_deportivo}</span>
                                 </div>
@@ -268,7 +268,7 @@ export default function DesignacionArbitros() {
                             <div key={arb.id} className="flex items-center justify-between p-2 bg-navy border border-white/5 rounded-xl group hover:border-orange/20 transition-all duration-200">
                                 <div className="flex items-center gap-3">
                                     <div className="w-8 h-8 rounded-full bg-navy border border-white/10 overflow-hidden relative shadow-inner flex items-center justify-center">
-                                        <ImagenLocal path={arb.foto_path} alt="" className="w-full h-full object-cover" />
+                                        <ImagenLocal path={arb.foto_path} alt={arb.nombre_deportivo} className="w-full h-full object-cover" />
                                     </div>
                                     <span className="font-bold text-white group-hover:text-orange transition-colors text-sm">{arb.nombre_deportivo}</span>
                                 </div>

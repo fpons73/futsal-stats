@@ -464,7 +464,7 @@ export default function CentroDatos() {
                                             {/* COLUMNA 1: PERSONA */}
                                             <div className="flex items-center gap-4 w-[40%]">
                                                 <span className="font-display font-black text-silver/20 text-xl w-6 text-center group-hover:text-orange/60 transition-colors">{idx + 1}</span>
-                                                <div className="w-12 h-12 rounded-full bg-navy border border-white/10 overflow-hidden shrink-0"><ImagenLocal path={s.foto} alt="" /></div>
+                                                <div className="w-12 h-12 rounded-full bg-navy border border-white/10 overflow-hidden shrink-0"><ImagenLocal path={s.foto} alt={s.nombre} /></div>
                                                 <div className="min-w-0">
                                                     <div className="font-bold text-white truncate">{s.nombre}</div>
                                                     {tab !== 'equipos' && (
@@ -480,7 +480,7 @@ export default function CentroDatos() {
                                             {/* COLUMNA 2: EQUIPO */}
                                             {tab !== 'equipos' && (
                                                 <div className="flex items-center gap-3 w-[40%] border-l border-white/5 pl-4">
-                                                    <div className="w-8 h-8 shrink-0 bg-white p-0.5 rounded-lg border border-white/10 flex items-center justify-center shadow-sm"><ImagenLocal path={s.equipo_escudo} alt="" className="w-full h-full object-contain" /></div>
+                                                    <div className="w-8 h-8 shrink-0 bg-white p-0.5 rounded-lg border border-white/10 flex items-center justify-center shadow-sm"><ImagenLocal path={s.equipo_escudo} alt={s.equipo_nombre} className="w-full h-full object-contain" /></div>
                                                     <span className="text-sm font-semibold text-silver/80 group-hover:text-white transition-colors truncate">{s.equipo_nombre}</span>
                                                 </div>
                                             )}
@@ -526,7 +526,7 @@ export default function CentroDatos() {
                                                 <span className={regla ? "text-white text-glow-blue" : "text-silver/40"}>{pos}</span>
                                             </td>
                                             <td className="p-4 flex items-center gap-3">
-                                                <div className="w-7 h-7 shrink-0 bg-white p-0.5 rounded-lg border border-white/10 flex items-center justify-center shadow-sm"><ImagenLocal path={fila.escudo} alt="" className="w-full h-full object-contain" /></div>
+                                                <div className="w-7 h-7 shrink-0 bg-white p-0.5 rounded-lg border border-white/10 flex items-center justify-center shadow-sm"><ImagenLocal path={fila.escudo} alt={fila.nombre} className="w-full h-full object-contain" /></div>
                                                 <span className="font-bold text-white group-hover:text-orange transition-colors duration-200">{fila.nombre}</span>
                                             </td>
                                             <td className="p-4 text-center">{fila.pj}</td>

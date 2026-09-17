@@ -250,7 +250,7 @@ export default function InscripcionEquipos() {
                             <div key={eq.id} className="flex items-center justify-between p-2.5 bg-navy-dark/35 border border-white/5 rounded-xl hover:bg-white/5 transition-all duration-300 group">
                                 <div className="flex items-center gap-3">
                                     <div className="w-9 h-9 rounded-xl bg-white border border-white/10 shadow-sm flex items-center justify-center overflow-hidden shrink-0 p-0.5">
-                                        <ImagenLocal path={eq.escudo_path} alt="" className="w-full h-full object-contain" />
+                                        <ImagenLocal path={eq.escudo_path} alt={eq.nombre} className="w-full h-full object-contain" />
                                     </div>
                                     <span className="font-semibold text-white group-hover:text-orange transition-colors duration-200 text-sm">{eq.nombre}</span>
                                 </div>
@@ -277,7 +277,7 @@ export default function InscripcionEquipos() {
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-3">
                                         <div className="w-9 h-9 rounded-xl bg-white border border-white/10 shadow-sm flex items-center justify-center overflow-hidden shrink-0 p-0.5">
-                                            <ImagenLocal path={eq.escudo_path} alt="" className="w-full h-full object-contain" />
+                                            <ImagenLocal path={eq.escudo_path} alt={eq.nombre} className="w-full h-full object-contain" />
                                         </div>
                                         <span className="font-bold text-white text-sm">{eq.nombre}</span>
                                     </div>

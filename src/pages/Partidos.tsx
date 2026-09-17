@@ -9,6 +9,7 @@ import Papa from "papaparse";
 import { inferirPosicionInicial } from "../utils/posiciones";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
+import SpinnerCarga from "../components/SpinnerCarga";
 import { useConfirm } from "../components/ConfirmDialog";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorPartidoConDeshacer } from "../hooks/useBorradorPartidoConDeshacer";
@@ -85,6 +86,8 @@ export default function Partidos() {
     const { edicionActiva, setEdicionActiva, ediciones: edicionesCtx, cargando: cargandoEdiciones } = useEdicion();
     const [partidoParaImportar, setPartidoParaImportar] = useState<Partido | null>(null);
     const [partidos, setPartidos] = useState<Partido[]>([]);
+    // Carga (o cambio de filtros) en curso: decide entre spinner / lista / vacío.
+    const [cargandoPartidos, setCargandoPartidos] = useState(true);
 
     // --- ESTADOS PARA IMPORTADOR DE CALENDARIO PDF ---
     const [isCalendarModalOpen, setIsCalendarModalOpen] = useState(false);
@@ -175,7 +178,8 @@ export default function Partidos() {
     // 3. Al cambiar filtros
     useEffect(() => {
         if (filtroEdicion) {
-            cargarPartidos();
+            setCargandoPartidos(true);
+            cargarPartidos().finally(() => setCargandoPartidos(false));
         } else {
             setPartidos([]);
         }
@@ -1525,18 +1529,18 @@ export default function Partidos() {
                             <div className="flex items-center gap-4 w-1/3 justify-end">
                                 <div className="flex flex-col items-end">
                                     <span className="font-display font-black text-lg text-right leading-tight text-white group-hover:text-orange transition-colors">{p.local_nombre}</span>
-                                    {p.local_bandera && <div className="w-5 h-3 border border-white/10 rounded-sm shadow-sm mt-1 overflow-hidden"><ImagenLocal path={p.local_bandera} alt="" className="w-full h-full object-cover" /></div>}
+                                    {p.local_bandera && <div className="w-5 h-3 border border-white/10 rounded-sm shadow-sm mt-1 overflow-hidden"><ImagenLocal path={p.local_bandera} alt={p.local_nombre} className="w-full h-full object-cover" /></div>}
                                 </div>
-                                <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-white p-1.5 rounded-xl border border-white/10 shadow-sm"><ImagenLocal path={p.local_escudo} alt="" className="max-w-full max-h-full object-contain filter drop-shadow-md" /></div>
+                                <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-white p-1.5 rounded-xl border border-white/10 shadow-sm"><ImagenLocal path={p.local_escudo} alt={p.local_nombre} className="max-w-full max-h-full object-contain filter drop-shadow-md" /></div>
                             </div>
                             <div className="bg-navy-dark/80 px-5 py-2.5 rounded-2xl font-display font-black text-2xl tracking-widest min-w-[120px] text-center border border-white/5 shadow-2xl text-orange text-glow-orange">
                                 {p.estado === 'programado' ? "VS" : `${p.goles_local} - ${p.goles_visitante}`}
                             </div>
                             <div className="flex items-center gap-4 w-1/3 justify-start">
-                                <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-white p-1.5 rounded-xl border border-white/10 shadow-sm"><ImagenLocal path={p.visitante_escudo} alt="" className="max-w-full max-h-full object-contain filter drop-shadow-md" /></div>
+                                <div className="w-12 h-12 flex-shrink-0 flex items-center justify-center bg-white p-1.5 rounded-xl border border-white/10 shadow-sm"><ImagenLocal path={p.visitante_escudo} alt={p.visitante_nombre} className="max-w-full max-h-full object-contain filter drop-shadow-md" /></div>
                                 <div className="flex flex-col items-start">
                                     <span className="font-display font-black text-lg text-left leading-tight text-white group-hover:text-orange transition-colors">{p.visitante_nombre}</span>
-                                    {p.visitante_bandera && <div className="w-5 h-3 border border-white/10 rounded-sm shadow-sm mt-1 overflow-hidden"><ImagenLocal path={p.visitante_bandera} alt="" className="w-full h-full object-cover" /></div>}
+                                    {p.visitante_bandera && <div className="w-5 h-3 border border-white/10 rounded-sm shadow-sm mt-1 overflow-hidden"><ImagenLocal path={p.visitante_bandera} alt={p.visitante_nombre} className="w-full h-full object-cover" /></div>}
                                 </div>
                             </div>
                         </div>
@@ -1549,7 +1553,9 @@ export default function Partidos() {
                         </div>
                     </div>
                 ))}
-                {partidos.length === 0 && (
+                {cargandoPartidos ? (
+                    <SpinnerCarga mensaje="Cargando partidos…" />
+                ) : partidos.length === 0 && (
                     <EstadoVacio
                         icono={Calendar}
                         titulo="No hay partidos en esta edición"

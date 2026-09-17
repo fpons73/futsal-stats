@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import Database from "@tauri-apps/plugin-sql";
-import { convertFileSrc } from "@tauri-apps/api/core";
+import { Bandera } from "../components/ImagenSegura";
 import {
     Users, Trophy, Shield, Activity,
     MapPin, Goal, CalendarDays, FileClock, Trash2
@@ -358,7 +358,7 @@ export default function Dashboard() {
                             <div key={idx} className="flex items-center justify-between p-2.5 hover:bg-white/5 rounded-xl transition-all duration-300 group">
                                 <div className="flex items-center gap-3">
                                     <span className={`font-display font-black w-6 text-center text-sm ${idx < 3 ? 'text-orange text-glow-orange' : 'text-silver/30'}`}>{idx + 1}</span>
-                                    <img src={convertFileSrc(pais.bandera || "")} className="w-6 h-4 object-cover shadow-md rounded-sm border border-white/10" />
+                                    <Bandera ruta={pais.bandera} nombre={pais.nombre} className="w-6 h-4 shadow-md" />
                                     <span className="text-sm font-medium text-silver/90 group-hover:text-white transition-colors">{pais.nombre}</span>
                                 </div>
                                 <div className="font-display font-bold text-white bg-white/5 border border-white/5 px-2.5 py-0.5 rounded-lg text-xs">
@@ -379,7 +379,7 @@ export default function Dashboard() {
                             <div key={idx} className="flex items-center justify-between p-2.5 hover:bg-white/5 rounded-xl transition-all duration-300 group">
                                 <div className="flex items-center gap-3">
                                     <span className={`font-display font-black w-6 text-center text-sm ${idx < 3 ? 'text-orange text-glow-orange' : 'text-silver/30'}`}>{idx + 1}</span>
-                                    <img src={convertFileSrc(pais.bandera || "")} className="w-6 h-4 object-cover shadow-md rounded-sm border border-white/10" />
+                                    <Bandera ruta={pais.bandera} nombre={pais.nombre} className="w-6 h-4 shadow-md" />
                                     <span className="text-sm font-medium text-silver/90 group-hover:text-white transition-colors">{pais.nombre}</span>
                                 </div>
                                 <div className="font-display font-bold text-white bg-white/5 border border-white/5 px-2.5 py-0.5 rounded-lg text-xs">
