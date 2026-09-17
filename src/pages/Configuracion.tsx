@@ -1,15 +1,16 @@
 import { useState, useEffect, useCallback } from "react";
-import { Settings, Trash2, Database as DbIcon, Check, Sparkles, Calendar, Users, FileClock, FolderOpen, Save, RotateCcw, History } from "lucide-react";
+import { Settings, Trash2, Database as DbIcon, Check, Sparkles, Calendar, Users, FileClock, FolderOpen, Save, RotateCcw, History, Flag } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import { open as abrirDialogo } from "@tauri-apps/plugin-dialog";
 import { ModalBuscarDuplicados } from "../components/ModalBuscarDuplicados";
 import { useConfirm } from "../components/ConfirmDialog";
 import { getPreferencia } from "../db";
-import { geminiService, DEFAULT_GEMINI_MODEL } from "../services/geminiService";
+import { geminiService, DEFAULT_GEMINI_MODEL, MODELOS_GEMINI_DISPONIBLES } from "../services/geminiService";
 import { exportarPersonasCSV, exportarEquiposCSV } from "../utils/csvExporters";
 import { seedConfederacionesFutsal } from "../utils/seedConfederaciones";
 import { seedCompeticionesFutsal } from "../utils/seedCompeticionesFutsal";
+import { seedPaises } from "../utils/seedPaises";
 import {
     leerCarpetaDatos, guardarCarpetaDatos, esRutaAlcanzable, carpetaSugerida,
 } from "../utils/carpetaDatos";
@@ -222,6 +223,22 @@ export default function Configuracion() {
     }
   };
 
+  const cargarPaises = async () => {
+    setLoading(true);
+    try {
+      const { añadidos, yaExistentes, vinculados } = await seedPaises();
+      toast.success(
+        `Catálogo de países: ${añadidos} añadidos, ${yaExistentes} ya existían` +
+        (vinculados > 0 ? `, ${vinculados} vinculados a su confederación.` : "."),
+      );
+    } catch (err) {
+      console.error(err, "Error cargando el catálogo de países. Visible: toast de error.");
+      toast.error(`Error al cargar el catálogo de países: ${err}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
       <h1 className="text-2xl font-bold text-white flex items-center gap-2"><Settings size={24} /> Configuracion</h1>
@@ -236,7 +253,18 @@ export default function Configuracion() {
           </div>
           <div>
             <label className="text-xs font-bold text-gray-400 uppercase">Modelo</label>
-            <input type="text" value={model} onChange={e => setModel(e.target.value)} className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white outline-none focus:border-purple-500 mt-1" />
+            <select
+              value={MODELOS_GEMINI_DISPONIBLES.some(m => m.id === model) ? model : ""}
+              onChange={e => setModel(e.target.value)}
+              className="w-full bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white outline-none focus:border-purple-500 mt-1"
+            >
+              {!MODELOS_GEMINI_DISPONIBLES.some(m => m.id === model) && (
+                <option value="">{model} (no reconocido)</option>
+              )}
+              {MODELOS_GEMINI_DISPONIBLES.map(m => (
+                <option key={m.id} value={m.id}>{m.etiqueta}</option>
+              ))}
+            </select>
           </div>
           <button onClick={guardarConfiguracionIA} className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold flex items-center gap-2 transition-colors">
             {savedKey ? <><Check size={16} /> Guardado</> : "Guardar"}
@@ -363,6 +391,9 @@ export default function Configuracion() {
           </button>
           <button onClick={cargarSeeds} disabled={loading} className="w-full text-left px-4 py-3 bg-gray-800/50 hover:bg-gray-800 rounded-lg text-gray-300 flex items-center gap-3 transition-colors disabled:opacity-50">
             <Calendar size={16} /> Cargar seeds de futsal (confederaciones y competiciones)
+          </button>
+          <button onClick={cargarPaises} disabled={loading} className="w-full text-left px-4 py-3 bg-gray-800/50 hover:bg-gray-800 rounded-lg text-gray-300 flex items-center gap-3 transition-colors disabled:opacity-50">
+            <Flag size={16} /> Cargar catálogo de países (ISO + confederación, ~220 países)
           </button>
         </div>
       </div>
