@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   build:
-    name: Instalador Windows (NSIS + MSI)
+    name: Instalador Windows (NSIS)
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,17 +51,20 @@ jobs:
           fi
 
       # beforeBuildCommand (npm run build: tsc + vite) corre dentro de la acción.
-      # Publica un DRAFT con los instaladores adjuntos: revisar, editar notas y
-      # publicar desde la UI de GitHub (proceso completo en CONTRIBUTING.md).
+      # Solo NSIS: es el entregable para usuarios (decisión del hito; el MSI además
+      # no soporta versiones prerelease como 1.0.0-rc.1). Publica un DRAFT con el
+      # instalador: revisar, editar notas y publicar desde la UI de GitHub
+      # (proceso completo en CONTRIBUTING.md).
       - name: Compilar instalador y crear borrador de Release
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          args: --bundles nsis
           tagName: ${{ steps.tag.outputs.tag }}
           releaseName: "Global Futsal Stats ${{ steps.tag.outputs.tag }}"
           releaseBody: >
-            Instalador de Windows (NSIS `*_x64-setup.exe` y MSI equivalente).
+            Instalador de Windows (NSIS).
 
 
             **Instalación**: descarga `Global Futsal Stats_*_x64-setup.exe`, ejecútalo

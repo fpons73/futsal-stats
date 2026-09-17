@@ -1,7 +1,7 @@
 {
   "name": "futsal-stats",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0-rc.1",
   "license": "MIT",
   "description": "Estadísticas y gestión de actas de fútbol sala (Tauri + React + SQLite)",
   "type": "module",

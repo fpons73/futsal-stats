@@ -196,7 +196,8 @@ GitHub Actions (`.github/workflows/ci.yml`) ejecuta en cada push a `main`:
 Adicionalmente, [`.github/workflows/release.yml`](./.github/workflows/release.yml)
 compila el instalador Windows (NSIS + MSI) en cada tag `v*` y lo adjunta a un
 [Release](https://github.com/fpons73/futsal-stats/releases) borrador — proceso
-completo en [CONTRIBUTING.md](./CONTRIBUTING.md).
+completo en [CONTRIBUTING.md](./CONTRIBUTING.md). El histórico de cambios por
+versión está en el [CHANGELOG](./CHANGELOG.md).
 
 ## Desarrollo y verificación E2E
 
