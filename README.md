@@ -20,25 +20,30 @@ estadísticas de fútbol sala: competiciones, ediciones, equipos, jugadores, ent
   resumen de nacionalidades y edades del quinteto.
 - **Acta en PDF** lista para presentación oficial: contexto (competición, temporada,
   jornada), banderas, firmas de árbitro/delegado/anotador y bloque de resumen.
-- **Borrador del acta** con autoguardado en `localStorage`, recuperación tras cierre
+- **Borrador del acta** con autoguardado, recuperación tras cierre
   accidental, aviso de cambios sin guardar y atajo `Ctrl+S`.
 - **Importación masiva de CSV** (equipos, jugadores, entrenadores y competiciones) con
   idempotencia, alias de países PT→ES y manejo honesto de datos incompletos.
 - **Filtros de calidad de datos**: detección y reparación manual de registros "sin
   nacionalidad" y de equipos "Desconocidos" desde las propias listas.
-- **UX consistente**: tema claro/oscuro persistido, toasts en lugar de `alert()`,
-  diálogos modales con foco atrapado y confirmaciones temáticas.
+- **UX consistente**: tema claro/oscuro persistido, notificaciones integradas
+  en la app (nada de ventanas emergentes del sistema), diálogos modales con
+  foco controlado y confirmaciones temáticas.
 
 ## Instalación (usuarios)
 
-1. Descarga `Global Futsal Stats_X.Y.Z_x64-setup.exe` desde la página de
-   [Releases](https://github.com/fpons73/futsal-stats/releases).
-2. Ejecútalo y sigue el asistente. **Requisitos**: Windows 10 o superior con
-   WebView2 Runtime (ya incluido en Windows 10/11 actualizados; si falta, el
-   instalador lo descarga solo). No necesita Node, Rust ni permisos raros.
-3. **SmartScreen**: al no estar el binario firmado todavía, Windows mostrará
+1. Descarga el instalador `Global Futsal Stats_X.Y.Z_x64-setup.exe` (~11 MB)
+   desde la página de [Releases](https://github.com/fpons73/futsal-stats/releases)
+   y ejecútalo siguiendo el asistente. **Requisito**: Windows 10 u 11 de 64 bits
+   (si a tu Windows le falta el componente WebView2, el instalador lo descarga
+   solo).
+2. **SmartScreen**: al no estar el binario firmado todavía, Windows mostrará
    «Windows protegió tu equipo» — pulsa *Más información* → *Ejecutar de todas
-   formas*. Es el aviso estándar para apps sin certificado.
+   formas*. Es el aviso estándar para apps sin certificado de pago; no significa
+   que sea peligrosa.
+3. **Tus datos se quedan en tu PC**: la app funciona sin conexión y no envía
+   nada a ningún servidor; crea copias de seguridad diarias que puedes
+   restaurar desde Configuración.
 
 ### Primer uso
 
@@ -85,7 +90,11 @@ con los pasos para reproducirlo y, si aplica, el informe exportado.
 | Tests | Vitest + Testing Library · tests de integración en Rust |
 | CI | GitHub Actions (`tsc`, `vitest`, migraciones y tests Rust) |
 
-## Requisitos previos
+## Requisitos previos (solo si compilas desde el código fuente)
+
+> Si solo quieres **usar la aplicación**, no necesitas nada de esto: descarga
+> el instalador desde [Releases](https://github.com/fpons73/futsal-stats/releases)
+> y listo (ver [Instalación](#instalación-usuarios)).
 
 - **Node.js 22+** y npm
 - **Rust stable** ([rustup](https://rustup.rs/))
@@ -127,7 +136,7 @@ src/
   components/   # Componentes compartidos (Modal, Toast, UndoToast, pizarra, PDF…)
   utils/        # Lógica: importadorMasivo.ts, csvExporters, calculadoraLiga, pdf…
   hooks/        # useFormGuard, useDialogFocus y otros hooks reutilizables
-  context/      # Contextos de React (tema, toasts…)
+  context/      # Contextos de React (tema, modo, edición activa)
   services/     # Acceso a base de datos
 src-tauri/
   src/lib.rs    # Comandos Tauri, migraciones y política de scope del fs
@@ -194,7 +203,7 @@ GitHub Actions (`.github/workflows/ci.yml`) ejecuta en cada push a `main`:
 - **Rust**: migraciones sobre BD virgen + tests unitarios de la lib.
 
 Adicionalmente, [`.github/workflows/release.yml`](./.github/workflows/release.yml)
-compila el instalador Windows (NSIS + MSI) en cada tag `v*` y lo adjunta a un
+compila el instalador Windows (NSIS) en cada tag `v*` y lo adjunta a un
 [Release](https://github.com/fpons73/futsal-stats/releases) borrador — proceso
 completo en [CONTRIBUTING.md](./CONTRIBUTING.md). El histórico de cambios por
 versión está en el [CHANGELOG](./CHANGELOG.md).
