@@ -2,6 +2,70 @@ use tauri::Manager;
 use tauri::State;
 use tauri_plugin_sql::{DbInstances, DbPool, Migration, MigrationKind};
 
+pub mod backups;
+
+/// Nombre del fichero de base de datos (misma cadena que el plugin SQL).
+const NOMBRE_BD: &str = "globalfutsal.db";
+/// Preferencia con el número de copias a conservar (0 = rotación desactivada).
+const CLAVE_PREF_RETENCION_BACKUPS: &str = "backups_retencion";
+/// Preferencia con la fecha (YYYY-MM-DD) del último backup automático diario.
+const CLAVE_PREF_ULTIMO_BACKUP: &str = "backups_ultimo_dia";
+/// Retención por defecto si la preferencia no existe o es inválida.
+const RETENCION_DEFECTO: usize = 7;
+
+/// Retención configurada (con tope sanitario 1..=365).
+fn retencion_desde_pref(valor: Option<&str>) -> usize {
+    valor
+        .and_then(|v| v.parse::<usize>().ok())
+        .filter(|n| (1..=365).contains(n))
+        .unwrap_or(RETENCION_DEFECTO)
+}
+
+/// Lee una preferencia de texto desde el pool del plugin SQL.
+async fn leer_pref(pool: &sqlx::SqlitePool, clave: &str) -> Option<String> {
+    let fila: Option<(Option<String>,)> =
+        sqlx::query_as("SELECT valor FROM Preferencia WHERE clave = ?1")
+            .bind(clave)
+            .fetch_optional(pool)
+            .await
+            .ok()?;
+    fila.and_then(|(v,)| v)
+}
+
+/// Escribe una preferencia de texto en el pool del plugin SQL.
+async fn escribir_pref(pool: &sqlx::SqlitePool, clave: &str, valor: &str) -> Result<(), String> {
+    sqlx::query("INSERT OR REPLACE INTO Preferencia (clave, valor) VALUES (?1, ?2)")
+        .bind(clave)
+        .bind(valor)
+        .execute(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Backup automático diario en el arranque (tarea 1.3 del hito 1.0).
+/// Silencioso: si algo falla, solo log — nunca bloquea el arranque.
+async fn backup_diario_si_toca(pool: sqlx::SqlitePool, dir_datos: std::path::PathBuf) {
+    let hoy = time::OffsetDateTime::now_utc().date().to_string(); // YYYY-MM-DD
+    let ultimo = leer_pref(&pool, CLAVE_PREF_ULTIMO_BACKUP).await;
+    if ultimo.as_deref() == Some(hoy.as_str()) {
+        return; // ya hay copia hoy
+    }
+    let retencion = retencion_desde_pref(
+        leer_pref(&pool, CLAVE_PREF_RETENCION_BACKUPS).await.as_deref(),
+    );
+    match backups::crear_backup(&pool, &dir_datos, retencion).await {
+        Ok(ruta) => {
+            if let Err(e) = escribir_pref(&pool, CLAVE_PREF_ULTIMO_BACKUP, &hoy).await {
+                eprintln!("[backups] copia creada ({}) pero no se pudo registrar el día: {e}", ruta.display());
+            } else {
+                eprintln!("[backups] copia diaria creada: {}", ruta.display());
+            }
+        }
+        Err(e) => eprintln!("[backups] no se pudo crear la copia diaria: {e}"),
+    }
+}
+
 /// Carpeta de datos por defecto SOLO en compilaciones de desarrollo (`npm run tauri dev`).
 /// En producción no existe: el usuario configura su carpeta en Configuración y queda
 /// guardada en la tabla Preferencia; el arranque la aplica si existe.
@@ -53,6 +117,172 @@ fn es_carpeta_alcanzable(app: tauri::AppHandle, ruta: String) -> bool {
 #[tauri::command]
 fn extender_alcance_fs(app: tauri::AppHandle, carpeta: String) -> Result<(), String> {
     extender_alcances(&app, std::path::Path::new(&carpeta))
+}
+
+// --- Copias de seguridad (tarea 1.3 del hito 1.0) ---
+
+/// Ruta de la BD real del plugin SQL (app_data_dir/globalfutsal.db).
+fn ruta_bd_real(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(dir.join(NOMBRE_BD))
+}
+
+/// Crea una copia ahora (VACUUM INTO) y aplica la rotación. Devuelve la ruta.
+#[tauri::command]
+async fn crear_backup_bd(
+    app: tauri::AppHandle,
+    db_instances: State<'_, DbInstances>,
+) -> Result<String, String> {
+    let pool = {
+        let instances = db_instances.0.read().await;
+        match instances.get("sqlite:globalfutsal.db") {
+            Some(DbPool::Sqlite(p)) => p.clone(),
+            _ => return Err("No se encontró la base de datos activa".to_string()),
+        }
+    };
+    let dir_datos = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let retencion = retencion_desde_pref(
+        leer_pref(&pool, CLAVE_PREF_RETENCION_BACKUPS).await.as_deref(),
+    );
+    let ruta = backups::crear_backup(&pool, &dir_datos, retencion).await?;
+    Ok(ruta.display().to_string())
+}
+
+/// Lista las copias disponibles: { ruta, nombre, bytes, fecha }.
+#[tauri::command]
+async fn listar_backups_bd(app: tauri::AppHandle) -> Result<Vec<BackupInfo>, String> {
+    let dir_datos = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(backups::listar_backups(&dir_datos)
+        .into_iter()
+        .filter_map(|ruta| {
+            let nombre = ruta.file_name()?.to_string_lossy().to_string();
+            let meta = std::fs::metadata(&ruta).ok()?;
+            // globalfutsal_YYYYMMDD_HHMMSS.db → YYYY-MM-DD HH:MM:SS
+            // ("globalfutsal_" = 13 chars; luego fecha 8, '_', hora 6, ".db")
+            let seg = |a: usize, b: usize| nombre.get(a..b).unwrap_or("??").to_string();
+            let fecha = format!(
+                "{}-{}-{} {}:{}:{}",
+                seg(13, 17), seg(17, 19), seg(19, 21), seg(22, 24), seg(24, 26), seg(26, 28)
+            );
+            Some(BackupInfo {
+                ruta: ruta.display().to_string(),
+                nombre,
+                bytes: meta.len(),
+                fecha,
+            })
+        })
+        .collect())
+}
+
+/// Copia de seguridad disponible en la lista.
+#[derive(serde::Serialize)]
+struct BackupInfo {
+    ruta: String,
+    nombre: String,
+    bytes: u64,
+    fecha: String,
+}
+
+/// Restaura una copia tras verificar su integridad completa (async).
+/// El frontend reinicia la app después: el pool del plugin debe reabrir la BD.
+#[tauri::command]
+async fn restaurar_backup_bd(
+    app: tauri::AppHandle,
+    db_instances: State<'_, DbInstances>,
+    ruta_copia: String,
+) -> Result<(), String> {
+    let pool = {
+        let instances = db_instances.0.read().await;
+        match instances.get("sqlite:globalfutsal.db") {
+            Some(DbPool::Sqlite(p)) => p.clone(),
+            _ => return Err("No se encontró la base de datos activa".to_string()),
+        }
+    };
+    let copia = std::path::PathBuf::from(&ruta_copia);
+    // Solo se restauran copias firmadas por la propia app (nombre con fecha).
+    let nombre = copia
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or("Ruta de copia inválida")?;
+    if !nombre.starts_with("globalfutsal_") || !nombre.ends_with(".db") {
+        return Err("El fichero no es una copia de esta aplicación".to_string());
+    }
+    backups::verificar_integridad(&copia).await?;
+    // Cerrar el pool ANTES de sobrescribir la BD (en Windows el fichero está agarrado).
+    pool.close().await;
+    let bd_real = ruta_bd_real(&app)?;
+    backups::restaurar_backup(
+        bd_real.parent().ok_or("sin directorio de datos")?,
+        &bd_real,
+        &copia,
+    )
+}
+
+/// Diagnóstico de la BD real (tarea 1.4): ¿abre? ¿integrity_check ok? ¿esquema
+/// presente? Lo llama el frontend cuando iniciarBaseDeDatos falla, para decidir
+/// si ofrece restaurar la última copia. No requiere el pool del plugin (que es
+/// justo lo que falla): abre la BD directamente en solo lectura.
+#[tauri::command]
+async fn diagnosticar_bd(app: tauri::AppHandle) -> Result<DiagnosticoBd, String> {
+    let bd_real = ruta_bd_real(&app)?;
+    if !bd_real.is_file() {
+        return Ok(DiagnosticoBd {
+            existe: false,
+            integridad: "fichero-ausente".to_string(),
+            esquema_ok: false,
+            ultima_copia: backups::listar_backups(
+                bd_real.parent().ok_or("sin directorio de datos")?,
+            )
+            .first()
+            .map(|p| p.display().to_string()),
+        });
+    }
+    let (integridad, esquema_ok) = match backups::verificar_integridad(&bd_real).await {
+        Ok(()) => ("ok".to_string(), true),
+        Err(e) => (e, false),
+    };
+    Ok(DiagnosticoBd {
+        existe: true,
+        integridad,
+        esquema_ok,
+        ultima_copia: backups::listar_backups(
+            bd_real.parent().ok_or("sin directorio de datos")?,
+        )
+        .first()
+        .map(|p| p.display().to_string()),
+    })
+}
+
+/// Resultado del diagnóstico de la BD real.
+#[derive(serde::Serialize)]
+struct DiagnosticoBd {
+    existe: bool,
+    integridad: String,
+    esquema_ok: bool,
+    /// Ruta de la copia más reciente, si la hay (para ofrecer restauración).
+    ultima_copia: Option<String>,
+}
+
+/// Guarda la retención de copias (1..=365; 0 no permitido aquí) y rota al momento.
+#[tauri::command]
+async fn guardar_retencion_backups(
+    app: tauri::AppHandle,
+    db_instances: State<'_, DbInstances>,
+    retener: i64,
+) -> Result<usize, String> {
+    if !(1..=365).contains(&retener) {
+        return Err("La retención debe estar entre 1 y 365".to_string());
+    }
+    let pool = {
+        let instances = db_instances.0.read().await;
+        match instances.get("sqlite:globalfutsal.db") {
+            Some(DbPool::Sqlite(p)) => p.clone(),
+            _ => return Err("No se encontró la base de datos activa".to_string()),
+        }
+    };
+    escribir_pref(&pool, CLAVE_PREF_RETENCION_BACKUPS, &retener.to_string()).await?;
+    let dir_datos = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    Ok(backups::rotar_backups(&dir_datos, retener as usize))
 }
 
 /// Lee la carpeta de datos configurada (Preferencia.carpeta_datos).
@@ -213,7 +443,12 @@ pub fn run() {
             leer_carpeta_datos,
             guardar_carpeta_datos,
             extender_alcance_fs,
-            es_carpeta_alcanzable
+            es_carpeta_alcanzable,
+            crear_backup_bd,
+            listar_backups_bd,
+            restaurar_backup_bd,
+            guardar_retencion_backups,
+            diagnosticar_bd
         ])
         .setup(|app| {
             // En desarrollo, la raíz del proyecto (donde vive Futsal_Data/) está
@@ -229,6 +464,38 @@ pub fn run() {
                     eprintln!("[dev] No se pudo permitir la carpeta del proyecto: {e}");
                 }
             }
+
+            // Backup automático diario (tarea 1.3): una vez el plugin SQL haya
+            // registrado la BD y ejecutado las migraciones. Se lanza en segundo
+            // plano y reintenta unos segundos hasta ver la BD activa.
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut pool = None;
+                for _ in 0..15 {
+                    let db_instances = handle.state::<DbInstances>();
+                    let instances = db_instances.0.read().await;
+                    if let Some(DbPool::Sqlite(p)) = instances.get("sqlite:globalfutsal.db") {
+                        pool = Some(p.clone());
+                    }
+                    drop(instances);
+                    if pool.is_some() {
+                        break;
+                    }
+                    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                }
+                let Some(p) = pool else {
+                    eprintln!("[backups] BD no disponible al arrancar; sin copia diaria");
+                    return;
+                };
+                let dir_datos = match handle.path().app_data_dir() {
+                    Ok(d) => d,
+                    Err(e) => {
+                        eprintln!("[backups] sin app_data_dir: {e}");
+                        return;
+                    }
+                };
+                backup_diario_si_toca(p, dir_datos).await;
+            });
             Ok(())
         })
         .run(tauri::generate_context!())

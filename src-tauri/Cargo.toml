@@ -28,10 +28,15 @@ tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
 reqwest = { version = "0.12", features = ["blocking"] }
 # Acceso directo a sqlx para transacciones reales (mismas features que tauri-plugin-sql)
-# + "migrate" para ejecutar las migraciones del app en tests de integración
-sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate"] }
+# + "migrate" para las migraciones en tests de integración y "macros" para query_as
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio", "migrate", "macros"] }
+# Runtime para el gancho async de backup diario en el arranque
+# (mismo crate que reexporta tauri; features mínimas)
+tokio = { version = "1", features = ["time"] }
 # Misma familia de versiones que usa tauri::fs::Scope internamente (tests)
 glob = "0.3"
+# Nombres de fichero de copia de seguridad con fecha (already in tree via sqlx)
+time = "0.3"
 
 [dev-dependencies]
 # mock_app para probar el alcance fs real (tauri::fs::Scope) en tests de integración
