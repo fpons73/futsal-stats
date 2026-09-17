@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Eye, Filter, UserCog, Upload, X, Calendar, AlertTriangle, Trophy } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
+import SpinnerCarga from "../components/SpinnerCarga";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -84,6 +85,8 @@ export default function Entrenadores() {
 
     useEffect(() => { cargarDatos(); }, []);
 
+    const [cargando, setCargando] = useState(true);
+
     async function cargarDatos() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -100,6 +103,8 @@ export default function Entrenadores() {
         } catch (error) {
             console.error(error);
             toast.error("Error al cargar los entrenadores");
+        } finally {
+            setCargando(false);
         }
     }
 
@@ -393,7 +398,9 @@ export default function Entrenadores() {
                         })}
                     </tbody>
                 </table>
-                {entrenadoresFiltrados.length === 0 && (entrenadores.length === 0 ? (
+                {cargando ? (
+                    <SpinnerCarga mensaje="Cargando entrenadores…" />
+                ) : entrenadoresFiltrados.length === 0 && (entrenadores.length === 0 ? (
                     <EstadoVacio
                         icono={UserCog}
                         titulo="Aún no hay entrenadores"

@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Eye, Filter, Gavel, Upload, X, Calendar } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
+import SpinnerCarga from "../components/SpinnerCarga";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -65,6 +66,8 @@ export default function Arbitros() {
 
     useEffect(() => { cargarDatos(); }, []);
 
+    const [cargando, setCargando] = useState(true);
+
     async function cargarDatos() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -76,6 +79,8 @@ export default function Arbitros() {
         } catch (error) {
             console.error(error);
             toast.error("Error al cargar los árbitros");
+        } finally {
+            setCargando(false);
         }
     }
 
@@ -283,7 +288,9 @@ export default function Arbitros() {
                         })}
                     </tbody>
                 </table>
-                {arbitrosFiltrados.length === 0 && (arbitros.length === 0 ? (
+                {cargando ? (
+                    <SpinnerCarga mensaje="Cargando árbitros…" />
+                ) : arbitrosFiltrados.length === 0 && (arbitros.length === 0 ? (
                     <EstadoVacio
                         icono={Gavel}
                         titulo="Aún no hay árbitros"

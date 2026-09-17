@@ -8,6 +8,7 @@ import Papa from "papaparse"; // El lector de CSV
 import { Search, Upload, Plus, Trash2, Edit, Flag, FileSpreadsheet } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
+import SpinnerCarga from "../components/SpinnerCarga";
 import Modal from "../components/Modal";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useFormGuard } from "../hooks/useFormGuard";
@@ -44,6 +45,8 @@ export default function Paises() {
         cargarDatos();
     }, []);
 
+    const [cargando, setCargando] = useState(true);
+
     async function cargarDatos() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -54,6 +57,8 @@ export default function Paises() {
         } catch (err) {
             console.error(err);
             toast.error("Error al cargar los países");
+        } finally {
+            setCargando(false);
         }
     }
 
@@ -301,7 +306,9 @@ export default function Paises() {
                         ))}
                     </tbody>
                 </table>
-                {paisesFiltrados.length === 0 && (paises.length === 0 ? (
+                {cargando ? (
+                    <SpinnerCarga mensaje="Cargando países…" />
+                ) : paisesFiltrados.length === 0 && (paises.length === 0 ? (
                     <EstadoVacio
                         icono={Flag}
                         titulo="Aún no hay países"

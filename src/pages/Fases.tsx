@@ -3,6 +3,7 @@ import Database from "@tauri-apps/plugin-sql";
 import { Plus, ListOrdered, Trash2, Edit, Filter, Flag } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
+import SpinnerCarga from "../components/SpinnerCarga";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -30,6 +31,8 @@ export default function Fases() {
 
     // Filtro Principal (Estado clave)
     const [edicionSeleccionada, setEdicionSeleccionada] = useState<string>("");
+    // Primera carga de fases de la edición seleccionada en curso.
+    const [cargandoFases, setCargandoFases] = useState(false);
 
     // Modal y Formulario
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -55,7 +58,8 @@ export default function Fases() {
     // 2. CARGAR FASES CUANDO CAMBIA LA EDICIÓN SELECCIONADA
     useEffect(() => {
         if (edicionSeleccionada) {
-            cargarFases(parseInt(edicionSeleccionada));
+            setCargandoFases(true);
+            cargarFases(parseInt(edicionSeleccionada)).finally(() => setCargandoFases(false));
         } else {
             setFases([]);
         }
@@ -243,6 +247,8 @@ export default function Fases() {
                 {/* ESTADO VACÍO */}
                 {!edicionSeleccionada ? (
                     <div className="p-10 text-center text-silver/40 font-medium">Selecciona una edición arriba para ver sus jornadas.</div>
+                ) : cargandoFases ? (
+                    <SpinnerCarga mensaje="Cargando fases…" />
                 ) : fases.length === 0 ? (
                     <EstadoVacio
                         icono={Flag}

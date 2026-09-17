@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Search, Trash2, Edit, Eye, Filter, User, Upload, X, Calendar, AlertTriangle } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
+import SpinnerCarga from "../components/SpinnerCarga";
 import Modal from "../components/Modal";
 import ImagenLocal from "../components/ImagenLocal";
 import { useFormGuard } from "../hooks/useFormGuard";
@@ -78,6 +79,8 @@ export default function Jugadores() {
 
     useEffect(() => { cargarDatos(); }, []);
 
+    const [cargando, setCargando] = useState(true);
+
     async function cargarDatos() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -89,6 +92,8 @@ export default function Jugadores() {
         } catch (error) {
             console.error(error);
             toast.error("Error al cargar los jugadores");
+        } finally {
+            setCargando(false);
         }
     }
 
@@ -417,7 +422,9 @@ export default function Jugadores() {
                         })}
                     </tbody>
                 </table>
-                {jugadoresFiltrados.length === 0 && (jugadores.length === 0 ? (
+                {cargando ? (
+                    <SpinnerCarga mensaje="Cargando jugadores…" />
+                ) : jugadoresFiltrados.length === 0 && (jugadores.length === 0 ? (
                     <EstadoVacio
                         icono={User}
                         titulo="Aún no hay jugadores"

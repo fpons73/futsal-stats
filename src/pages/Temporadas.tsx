@@ -3,6 +3,7 @@ import Database from "@tauri-apps/plugin-sql";
 import { Plus, Calendar, Trash2, Edit, CalendarRange } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
+import SpinnerCarga from "../components/SpinnerCarga";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -37,6 +38,8 @@ export default function Temporadas() {
         cargarDatos();
     }, []);
 
+    const [cargando, setCargando] = useState(true);
+
     async function cargarDatos() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -46,6 +49,8 @@ export default function Temporadas() {
         } catch (error) {
             console.error("Error cargando temporadas:", error);
             toast.error("Error al cargar las temporadas");
+        } finally {
+            setCargando(false);
         }
     }
 
@@ -158,7 +163,9 @@ export default function Temporadas() {
                     </div>
                 ))}
 
-                {temporadas.length === 0 && (
+                {cargando ? (
+                    <SpinnerCarga mensaje="Cargando temporadas…" />
+                ) : temporadas.length === 0 && (
                     <EstadoVacio
                         icono={CalendarRange}
                         titulo="Aún no hay temporadas"

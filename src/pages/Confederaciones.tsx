@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core";
 import { Plus, Globe, Trash2, Upload, Edit, X } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
+import SpinnerCarga from "../components/SpinnerCarga";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -37,6 +38,8 @@ export default function Confederaciones() {
 
     useEffect(() => { cargarDatos(); }, []);
 
+    const [cargando, setCargando] = useState(true);
+
     async function cargarDatos() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -46,6 +49,8 @@ export default function Confederaciones() {
         } catch (error) {
             console.error("Error cargando:", error);
             toast.error("Error al cargar las confederaciones");
+        } finally {
+            setCargando(false);
         }
     }
 
@@ -155,7 +160,9 @@ export default function Confederaciones() {
 
             {/* REJILLA DE TARJETAS */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {data.length === 0 && (
+                {cargando ? (
+                    <SpinnerCarga mensaje="Cargando confederaciones…" />
+                ) : data.length === 0 && (
                     <EstadoVacio
                         icono={Globe}
                         titulo="Aún no hay confederaciones"

@@ -5,6 +5,7 @@ import { convertFileSrc } from "@tauri-apps/api/core"; // <--- USAMOS ESTO QUE E
 import { Plus, Trophy, Trash2, Edit, Upload, X } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
+import SpinnerCarga from "../components/SpinnerCarga";
 import Modal from "../components/Modal";
 import { UndoToast } from "../components/UndoToast";
 import { useBorradorConDeshacer } from "../hooks/useBorradorConDeshacer";
@@ -56,6 +57,8 @@ export default function Competiciones() {
 
     useEffect(() => { cargarDatos(); }, []);
 
+    const [cargando, setCargando] = useState(true);
+
     async function cargarDatos() {
         try {
             const db = await Database.load("sqlite:globalfutsal.db");
@@ -68,6 +71,8 @@ export default function Competiciones() {
         } catch (error) {
             console.error(error);
             toast.error("Error al cargar las competiciones");
+        } finally {
+            setCargando(false);
         }
     }
 
@@ -169,7 +174,9 @@ export default function Competiciones() {
 
             {/* REJILLA DE TARJETAS */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                {competiciones.length === 0 && (
+                {cargando ? (
+                    <SpinnerCarga mensaje="Cargando competiciones…" />
+                ) : competiciones.length === 0 && (
                     <EstadoVacio
                         icono={Trophy}
                         titulo="Aún no hay competiciones"
