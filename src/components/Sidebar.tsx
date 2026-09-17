@@ -3,8 +3,10 @@ import {
     LayoutDashboard, Globe, Flag, Trophy, Users, Shirt, Calendar,
     Settings, Layers, ListOrdered, UserCog, Gavel, MapPin,
     UserPlus, UserCheck, CalendarDays, BarChart3, Sun, Moon,
-    Download, Star, Shield
+    Download, Star, Shield, AlertOctagon
 } from "lucide-react";
+import { registroErrores } from "../utils/registroErrores";
+import { useEffect, useState } from "react";
 import logo from "../assets/logo.png";
 import { useTheme } from "../context/ThemeContext";
 import { useEdicion } from "../context/EdicionContext";
@@ -52,10 +54,18 @@ const secciones: { titulo: string; items: { icon: typeof LayoutDashboard; label:
     },
 ];
 
-export default function Sidebar() {
+interface SidebarProps {
+    /** Abre el panel del registro de errores (tarea 2.3). */
+    alAbrirErrores?: () => void;
+}
+
+export default function Sidebar({ alAbrirErrores }: SidebarProps) {
     const location = useLocation();
     const { theme, toggleTheme } = useTheme();
     const { edicionActiva, setEdicionActiva, ediciones } = useEdicion();
+    // Badge del registro de errores: nº de entradas no vistas (se refresca al suscribirse).
+    const [noVistos, setNoVistos] = useState(registroErrores.noVistos());
+    useEffect(() => registroErrores.suscribir(() => setNoVistos(registroErrores.noVistos())), []);
 
     const isDark = theme === "dark";
 
@@ -124,6 +134,25 @@ export default function Sidebar() {
                     </div>
                 ))}
             </nav>
+
+            {/* REGISTRO DE ERRORES (tarea 2.3) */}
+            <div className="px-3 pt-3 shrink-0">
+                <button
+                    onClick={alAbrirErrores}
+                    className="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-sm font-semibold text-silver/70 hover:bg-white/5 hover:text-white transition-all"
+                    title="Registro de errores de la aplicación"
+                >
+                    <span className="flex items-center gap-2">
+                        <AlertOctagon size={16} className="text-silver/40" />
+                        Registro de errores
+                    </span>
+                    {noVistos > 0 && (
+                        <span className="min-w-5 h-5 px-1.5 rounded-full bg-red text-white text-[10px] font-black flex items-center justify-center shadow">
+                            {noVistos > 99 ? "99+" : noVistos}
+                        </span>
+                        )}
+                </button>
+            </div>
 
             {/* TOGGLE TEMA */}
             <div className="p-3 border-t border-white/10 shrink-0">

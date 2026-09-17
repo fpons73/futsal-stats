@@ -8,6 +8,7 @@ import { ModoProvider } from "./context/ModoContext";
 import { iniciarBaseDeDatos, esBaseVacia, getPreferencia } from "./db";
 import { aplicarCarpetaDatosAlArranque } from "./utils/carpetaDatos";
 import Sidebar from "./components/Sidebar";
+import PanelErrores from "./components/PanelErrores";
 import { ToastContainer } from "./components/Toast";
 import Dashboard from "./pages/Dashboard";
 import Competiciones from "./pages/Competiciones";
@@ -38,6 +39,8 @@ function App() {
   const [onboarding, setOnboarding] = useState(false);
   // Recuperación de BD corrupta (tarea 1.4): diagnóstico y oferta de restaurar.
   const [recuperacion, setRecuperacion] = useState(false);
+  // Registro global de errores (tarea 2.3): panel deslizante desde la sidebar.
+  const [panelErrores, setPanelErrores] = useState(false);
 
   useEffect(() => {
     iniciarBaseDeDatos()
@@ -146,7 +149,7 @@ function App() {
         <EdicionProvider>
           <Router>
             <div className="flex min-h-screen bg-transparent text-white font-sans">
-              <Sidebar />
+              <Sidebar alAbrirErrores={() => setPanelErrores(true)} />
               <main className="flex-1 ml-64 p-0 overflow-auto">
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
@@ -182,6 +185,7 @@ function App() {
                   <Route path="*" element={<div className="p-10 text-silver/40">Página no encontrada</div>} />
                 </Routes>
               </main>
+              <PanelErrores abierto={panelErrores} onCerrar={() => setPanelErrores(false)} />
               <ToastContainer />
             </div>
           </Router>

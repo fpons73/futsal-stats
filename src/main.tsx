@@ -3,6 +3,11 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
 import { barrerBorradoresAntiguos } from "./utils/actaDraft";
+import { registrarManejadoresGlobales } from "./utils/registroErrores";
+
+// Captura global de errores (tarea 2.3): console.error, window.onerror y
+// unhandledrejection alimentan el registro consultable desde la sidebar.
+registrarManejadoresGlobales();
 
 // Aplicar el tema ANTES del primer render para evitar destello de tema incorrecto:
 // ThemeContext guarda en localStorage de forma síncrona, así que aquí basta con
