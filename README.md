@@ -204,7 +204,8 @@ Para probar en la app real (diálogos nativos, puente Tauri, alcance `fs`, rendi
 con 70k registros, capturas) hay un conjunto de scripts CDP/UIA en [`scripts/`](./scripts),
 documentados en el [README de scripts](./scripts/README.md): cómo lanzar la app con el
 puerto de depuración, las dos rutas de importación (diálogo nativo vs. ruta predefinida)
-y las verificaciones página a página.
+y las verificaciones página a página. Para validar el instalador en una VM limpia
+(sin Rust/Node), sigue la [guía de prueba en máquina limpia](./docs/prueba-maquina-limpia.md).
 
 ## Licencia
 
