@@ -1,8 +1,38 @@
 import { getPreferencia, setPreferencia } from "../db";
 
-export const DEFAULT_GEMINI_MODEL = "gemini-2.0-flash";
+export const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
 export const GEMINI_API_KEY_STORAGE = "gemini_api_key";
 export const GEMINI_MODEL_STORAGE = "gemini_model_name";
+
+/** Modelos operativos que ofrece el selector (estables en la API pública). */
+export const MODELOS_GEMINI_DISPONIBLES = [
+    { id: "gemini-3.6-flash", etiqueta: "Gemini 3.6 Flash (recomendado)" },
+    { id: "gemini-3.7-flash", etiqueta: "Gemini 3.7 Flash" },
+    { id: "gemini-3.8-flash", etiqueta: "Gemini 3.8 Flash" },
+    { id: "gemini-2.5-flash", etiqueta: "Gemini 2.5 Flash" },
+    { id: "gemini-2.5-flash-lite", etiqueta: "Gemini 2.5 Flash-Lite" },
+] as const;
+
+/** Modelos retirados por Google (apagados): si la preferencia guardada apunta
+ *  a uno de ellos, se repara automáticamente al default. 2.0 fue cerrado y
+ *  con él la app dejaba de generar crónicas sin que el usuario supiera por qué. */
+const MODELOS_RETIRADOS = new Set([
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.0-flash-exp",
+    "gemini-1.5-flash",
+    "gemini-1.5-flash-8b",
+    "gemini-1.5-pro",
+]);
+
+/** Normaliza un modelo guardado: retirado → default. Devuelve también si
+ *  cambió, para que el llamador persista la reparación. */
+export function normalizarModelo(modelo: string | null | undefined): { modelo: string; reparado: boolean } {
+    const limpio = (modelo ?? "").trim();
+    if (!limpio) return { modelo: DEFAULT_GEMINI_MODEL, reparado: true };
+    if (MODELOS_RETIRADOS.has(limpio)) return { modelo: DEFAULT_GEMINI_MODEL, reparado: true };
+    return { modelo: limpio, reparado: false };
+}
 
 let cachedApiKey: string | null = null;
 let cachedModel: string | null = null;
@@ -24,10 +54,17 @@ export interface ChatMessage {
 export const geminiService = {
   async loadPreferences(): Promise<{ apiKey: string; model: string }> {
     const apiKey = await getPreferencia(GEMINI_API_KEY_STORAGE, localStorage.getItem(GEMINI_API_KEY_STORAGE) || (import.meta as any).env?.VITE_GEMINI_API_KEY || "");
-    const model = await getPreferencia(GEMINI_MODEL_STORAGE, localStorage.getItem(GEMINI_MODEL_STORAGE) || DEFAULT_GEMINI_MODEL);
+    let { modelo, reparado } = normalizarModelo(
+      await getPreferencia(GEMINI_MODEL_STORAGE, localStorage.getItem(GEMINI_MODEL_STORAGE) || DEFAULT_GEMINI_MODEL),
+    );
+    if (reparado) {
+      // Persistir la reparación: si no, el valor apagado volvería a cargarse
+      // en el próximo arranque y el fallo sería intermitente.
+      await setPreferencia(GEMINI_MODEL_STORAGE, modelo);
+    }
     cachedApiKey = apiKey;
-    cachedModel = model;
-    return { apiKey, model };
+    cachedModel = modelo;
+    return { apiKey, model: modelo };
   },
 
   getApiKey(): string {
@@ -43,7 +80,10 @@ export const geminiService = {
 
   getModel(): string {
     if (cachedModel !== null) return cachedModel;
-    return (typeof window !== "undefined" ? localStorage.getItem(GEMINI_MODEL_STORAGE) : "") || DEFAULT_GEMINI_MODEL;
+    const { modelo } = normalizarModelo(
+      (typeof window !== "undefined" ? localStorage.getItem(GEMINI_MODEL_STORAGE) : "") || DEFAULT_GEMINI_MODEL,
+    );
+    return modelo;
   },
 
   setModel(model: string): void {
