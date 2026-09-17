@@ -3,7 +3,8 @@
 const port = process.env.CDP_PORT || "9333";
 
 const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-const page = targets.find((t) => t.type === "page" && t.url.includes("localhost:1430"));
+// Acepta la app dev (localhost:1430) y la de producción (tauri.localhost).
+const page = targets.find((t) => t.type === "page" && (t.url.includes("localhost:1430") || t.url.includes("tauri.localhost")));
 if (!page) {
   console.error("No app page target found. Targets:", targets.map((t) => `${t.type} ${t.url}`));
   process.exit(1);

@@ -9,7 +9,7 @@ import { exportarPersonasCSV, exportarEquiposCSV } from "../utils/csvExporters";
 import { seedConfederacionesFutsal } from "../utils/seedConfederaciones";
 import { seedCompeticionesFutsal } from "../utils/seedCompeticionesFutsal";
 import {
-    leerCarpetaDatos, guardarCarpetaDatos, esRutaAlcanzable, CARPETA_SUGERIDA,
+    leerCarpetaDatos, guardarCarpetaDatos, esRutaAlcanzable, carpetaSugerida,
 } from "../utils/carpetaDatos";
 import { toast } from "../components/Toast";
 import {
@@ -29,6 +29,8 @@ export default function Configuracion() {
   // Carpeta de datos configurable (null mientras carga).
   const [carpetaDatos, setCarpetaDatos] = useState<string | null>(null);
   const [alcanzable, setAlcanzable] = useState<boolean | null>(null);
+  // Carpeta sugerida según contexto (raíz del proyecto en dev, Documentos en producción).
+  const [sugerida, setSugerida] = useState("");
   // Confirmación temática para acciones destructivas (sustituye a ask()/message() nativos).
   const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
 
@@ -43,6 +45,7 @@ export default function Configuracion() {
       setCarpetaDatos(c);
       if (c) esRutaAlcanzable(c).then(setAlcanzable);
     });
+    carpetaSugerida().then(setSugerida);
   }, []);
 
   const guardarConfiguracionIA = () => {
@@ -88,13 +91,13 @@ export default function Configuracion() {
     }
   };
 
-  /** Un clic para adoptar la carpeta sugerida (raíz del proyecto en dev). */
+  /** Un clic para adoptar la carpeta sugerida. */
   const usarSugerida = async () => {
     try {
-      await guardarCarpetaDatos(CARPETA_SUGERIDA);
-      setCarpetaDatos(CARPETA_SUGERIDA);
-      setAlcanzable(await esRutaAlcanzable(CARPETA_SUGERIDA));
-      toast.success(`Carpeta de datos configurada: ${CARPETA_SUGERIDA}`);
+      await guardarCarpetaDatos(sugerida);
+      setCarpetaDatos(sugerida);
+      setAlcanzable(await esRutaAlcanzable(sugerida));
+      toast.success(`Carpeta de datos configurada: ${sugerida}`);
     } catch (e) {
       toast.error(`No se pudo configurar la carpeta: ${e}`);
     }
@@ -208,7 +211,7 @@ export default function Configuracion() {
           </button>
           {!carpetaDatos && (
             <button onClick={usarSugerida} className="px-4 py-2 bg-gray-800/50 hover:bg-gray-800 text-gray-300 border border-gray-700 rounded-lg font-bold flex items-center gap-2 transition-colors">
-              <Check size={16} /> Usar sugerida ({CARPETA_SUGERIDA})
+              <Check size={16} /> Usar sugerida ({sugerida || "…"})
               <span className="hidden sm:inline text-gray-400/70 font-normal">— donde vive Futsal_Data/</span>
             </button>
           )}
@@ -222,7 +225,7 @@ export default function Configuracion() {
           )}
         </div>
         <p className="text-xs text-gray-400/60 mt-2">
-          Sugerencia: <code className="text-gray-300">{CARPETA_SUGERIDA}</code> (donde vive <code className="text-gray-300">Futsal_Data/</code>).
+          Sugerencia: <code className="text-gray-300">{sugerida || "…"}</code> (donde vive <code className="text-gray-300">Futsal_Data/</code> en desarrollo).
           El cambio se aplica al momento y persiste entre sesiones.
         </p>
       </div>

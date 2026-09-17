@@ -5,8 +5,22 @@ import { toast } from "../components/Toast";
 /** Clave de preferencia donde vive la carpeta de datos (misma en Rust). */
 export const CLAVE_CARPETA_DATOS = "carpeta_datos";
 
-/** Carpeta por defecto sugerida en la UI de Configuración (raíz del proyecto en dev). */
-export const CARPETA_SUGERIDA = "C:\\Proyectos\\futsal-stats";
+/** Raíz del proyecto, inyectada por Vite (`define`). Solo tiene valor en dev. */
+declare const __RAIZ_PROYECTO__: string;
+
+/** Carpeta de datos sugerida en la UI de Configuración.
+ *
+ *  En desarrollo apunta a la raíz real del proyecto (donde vive Futsal_Data/),
+ *  resuelta en build — funciona en cualquier máquina, no solo en la que creó
+ *  el proyecto. En producción (instalador) no hay proyecto: se sugiere una
+ *  carpeta `Global Futsal Stats` dentro de Documentos del usuario, que
+ *  siempre existe y es escribible.
+ */
+export async function carpetaSugerida(): Promise<string> {
+  if (import.meta.env.DEV) return __RAIZ_PROYECTO__;
+  const { documentDir, join } = await import("@tauri-apps/api/path");
+  return join(await documentDir(), "Global Futsal Stats");
+}
 
 /** Lee la carpeta de datos configurada (null si no hay ninguna). */
 export async function leerCarpetaDatos(): Promise<string | null> {

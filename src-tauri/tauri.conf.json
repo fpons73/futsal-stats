@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "futsal-stats",
+  "productName": "Global Futsal Stats",
   "version": "0.1.0",
   "identifier": "com.fpons.futsal-stats",
   "build": {
@@ -19,7 +19,8 @@
       }
     ],
     "security": {
-      "csp": null,
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: asset: http://asset.localhost https:; connect-src 'self' ipc: http://ipc.localhost https://generativelanguage.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'self'",
+      "devCsp": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob: asset: http://asset.localhost https:; connect-src 'self' ipc: http://ipc.localhost ws://localhost:1430 http://localhost:1430 https://generativelanguage.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'self'",
       "assetProtocol": {
         "enable": true,
         "scope": [
@@ -31,6 +32,8 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "FcoP11",
+    "copyright": "© 2026 FcoP11 · Licencia MIT",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

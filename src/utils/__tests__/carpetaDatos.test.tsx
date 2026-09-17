@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import {
     leerCarpetaDatos, guardarCarpetaDatos, aplicarCarpetaDatosAlArranque,
-    esRutaAlcanzable, avisarSiRutaDenegada, CLAVE_CARPETA_DATOS,
+    esRutaAlcanzable, avisarSiRutaDenegada, carpetaSugerida, CLAVE_CARPETA_DATOS,
 } from "../carpetaDatos";
 import { ToastContainer, toast } from "../../components/Toast";
 
@@ -31,6 +31,13 @@ beforeEach(() => {
 afterEach(cleanup);
 
 describe("carpetaDatos", () => {
+    it("carpetaSugerida devuelve una ruta real (define __RAIZ_PROYECTO__ inyectada)", async () => {
+        const sugerida = await carpetaSugerida();
+        expect(typeof sugerida).toBe("string");
+        expect(sugerida.length).toBeGreaterThan(3);
+        expect(sugerida.toLowerCase()).not.toContain("undefined");
+    });
+
     it("leerCarpetaDatos devuelve la preferencia guardada por Rust", async () => {
         invocar.mockResolvedValueOnce("C:\\Datos\\Futsal");
         expect(await leerCarpetaDatos()).toBe("C:\\Datos\\Futsal");
