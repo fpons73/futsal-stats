@@ -42,6 +42,8 @@ vi.mock("../../utils/importadorMasivo", () => ({
     importarCompeticionesCSV: (...a: unknown[]) => competiciones(...(a as [string?])),
     importarJugadoresCSV: (...a: unknown[]) => jugadores(...(a as [string?])),
     importarEntrenadoresCSV: (...a: unknown[]) => entrenadores(...(a as [string?])),
+    // Registro de informes (tarea 1.2): vacío en tests — sin avisos que exportar.
+    ULTIMOS_INFORMES: {},
 }));
 
 const CSVs = [

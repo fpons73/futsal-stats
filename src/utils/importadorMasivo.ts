@@ -3,6 +3,41 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { readTextFile } from "@tauri-apps/plugin-fs";
 import Papa from "papaparse";
 import { normalizeString } from "./stringUtils";
+import type { InformeImportacion, FilaConError } from "./informeImportacion";
+
+/** Estado compartido de los importadores masivos: el último informe por tipo.
+ *  La página Importar lo lee para ofrecer "Exportar informe". Clave = tipo. */
+export const ULTIMOS_INFORMES: Record<string, InformeImportacion> = {};
+
+/** Finaliza un importador: compone el informe estructurado, lo registra y
+ *  devuelve el string de resumen para el toast (mismo formato que siempre). */
+function cerrarInforme(
+  base: Omit<InformeImportacion, "fecha" | "paisesNoEncontrados" | "filasConError">,
+  paisesNoEncontrados: Map<string, number>,
+  filasConError: FilaConError[],
+): string {
+  const informe: InformeImportacion = {
+    ...base,
+    fecha: new Date().toISOString(),
+    paisesNoEncontrados: [...paisesNoEncontrados.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([pais, filas]) => ({ pais, filas })),
+    filasConError,
+  };
+  ULTIMOS_INFORMES[base.tipo] = informe;
+
+  let detalle = `${base.importados} ${base.tipo} importados, ${base.omitidos} omitidos (ya existían), ${base.errores} errores.`;
+  if (base.sinPais > 0) detalle += ` ${base.sinPais} sin país en el CSV (quedaron sin nacionalidad).`;
+  if (paisesNoEncontrados.size > 0) {
+    const resumen = [...paisesNoEncontrados.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([p, n]) => `${p} ×${n}`)
+      .join(", ");
+    detalle += ` PAÍSES NO ENCONTRADOS (quedaron sin país): ${resumen}`;
+  }
+  return detalle;
+}
 
 /**
  * Aliases de países en otras lenguas → nombre en español de la tabla Pais.
@@ -130,11 +165,25 @@ export async function importarEquiposCSV(rutaPredefinida?: string): Promise<stri
   const parsed = Papa.parse<any>(content, { header: true, skipEmptyLines: true });
   const db = await Database.load("sqlite:globalfutsal.db");
 
-  const paises = await db.select<any[]>("SELECT id, nombre FROM Pais");
+  let paises = await db.select<any[]>("SELECT id, nombre FROM Pais");
   const paisesMap = new Map(
     paises.map((p) => [normalizeString(p.nombre), p.id]),
   );
-  const desc = paises.find((p) => normalizeString(p.nombre) === "desconocido");
+  // El país "Desconocido" es el destino seguro de filas sin país o con un país
+  // fuera del catálogo. En una BD virgen no existe y Equipo.pais_id es NOT NULL,
+  // así que sin él TODO el CSV moriría (bug de primera instalación).
+  // Lo creamos aquí, idempotente, y refrescamos el catálogo tras insertarlo.
+  let desc = paises.find((p) => normalizeString(p.nombre) === "desconocido");
+  if (!desc) {
+    try {
+      await db.execute("INSERT INTO Pais (nombre, codigo_iso2, codigo_iso3) VALUES ('Desconocido', 'ZZ', 'ZZZ')");
+      paises = await db.select<any[]>("SELECT id, nombre FROM Pais");
+      desc = paises.find((p) => normalizeString(p.nombre) === "desconocido");
+    } catch (e) {
+      // Concurrency o permisos: seguimos con el comportamiento anterior (null).
+      console.error(e, "No se pudo crear el país Desconocido. Visible: el informe contará las filas afectadas.");
+    }
+  }
   const idDesconocido = desc?.id ?? null;
 
   // Idempotencia: no reimportar equipos cuyo nombre ya existe (evita duplicar
@@ -142,10 +191,12 @@ export async function importarEquiposCSV(rutaPredefinida?: string): Promise<stri
   const existentes = await db.select<any[]>("SELECT nombre FROM Equipo");
   const nombresExistentes = new Set(existentes.map(e => String(e.nombre ?? "").toLowerCase().trim()));
 
-  let importados = 0, omitidos = 0, errores = 0;
+  let importados = 0, omitidos = 0, errores = 0, sinPais = 0;
   const paisesNoEncontrados = new Map<string, number>();
+  const filasConError: FilaConError[] = [];
+  const numeroFila = (idx: number) => idx + 2; // +1 cabecera, +1 base 1
 
-  for (const row of parsed.data) {
+  for (const [idx, row] of parsed.data.entries()) {
     try {
       const nombre = String(row.nombre ?? "").trim();
       if (!nombre || nombresExistentes.has(nombre.toLowerCase())) {
@@ -157,16 +208,27 @@ export async function importarEquiposCSV(rutaPredefinida?: string): Promise<stri
       const clavePais = normalizeString((row.pais || row.pais_nombre || "").trim());
       let paisId: number | null;
       if (!clavePais) {
+        sinPais++;
         if (idDesconocido === null) {
           errores++;
+          filasConError.push({
+            fila: numeroFila(idx),
+            identificador: nombre || "(sin nombre)",
+            error: 'Sin país en el CSV y no existe el país "Desconocido" (créalo en Países).',
+          });
           continue;
         }
         paisId = idDesconocido;
       } else {
-        paisId = paisesMap.get(clavePais) ?? null;
-        if (paisId === null) {
+        const hallado = paisesMap.get(clavePais);
+        if (hallado !== undefined) {
+          paisId = hallado;
+        } else {
+          // País del CSV fuera del catálogo → "Desconocido" (nueva BD) o NULL
+          // con aviso (BD sin Desconocido y el INSERT falló). Nunca muere en NOT NULL.
           const etiqueta = (row.pais || row.pais_nombre || "").trim();
           paisesNoEncontrados.set(etiqueta, (paisesNoEncontrados.get(etiqueta) ?? 0) + 1);
+          paisId = idDesconocido;
         }
       }
       await db.execute(`
@@ -179,19 +241,19 @@ export async function importarEquiposCSV(rutaPredefinida?: string): Promise<stri
     } catch (e) {
       console.error("Error importando equipo:", e);
       errores++;
+      filasConError.push({
+        fila: numeroFila(idx),
+        identificador: String(row.nombre ?? "(sin nombre)").trim(),
+        error: String(e).slice(0, 300),
+      });
     }
   }
 
-  let detalle = `${importados} equipos importados, ${omitidos} omitidos (ya existían), ${errores} errores.`;
-  if (paisesNoEncontrados.size > 0) {
-    const resumen = [...paisesNoEncontrados.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([p, n]) => `${p} ×${n}`)
-      .join(", ");
-    detalle += ` PAÍSES NO ENCONTRADOS (quedaron sin país): ${resumen}`;
-  }
-  return detalle;
+  return cerrarInforme(
+    { tipo: "equipos", fichero: selected, importados, omitidos, errores, sinPais },
+    paisesNoEncontrados,
+    filasConError,
+  );
 }
 
 /**
@@ -263,8 +325,10 @@ export async function importarJugadoresCSV(rutaPredefinida?: string): Promise<st
 
   let importados = 0, omitidos = 0, errores = 0, sinPais = 0;
   const paisesNoEncontrados = new Map<string, number>();
+  const filasConError: FilaConError[] = [];
+  const numeroFila = (idx: number) => idx + 2;
 
-  for (const row of parsed.data) {
+  for (const [idx, row] of parsed.data.entries()) {
     try {
       const deportivo = String(row.nombre_deportivo ?? row.nombre ?? "").trim();
       const claveJug =
@@ -311,20 +375,19 @@ export async function importarJugadoresCSV(rutaPredefinida?: string): Promise<st
     } catch (e) {
       console.error("Error importando jugador:", e);
       errores++;
+      filasConError.push({
+        fila: numeroFila(idx),
+        identificador: String(row.nombre_deportivo ?? row.nombre ?? "(sin nombre)").trim(),
+        error: String(e).slice(0, 300),
+      });
     }
   }
 
-  let detalle = `${importados} jugadores importados, ${omitidos} omitidos (ya existían), ${errores} errores.`;
-  if (sinPais > 0) detalle += ` ${sinPais} sin nacionalidad en el CSV (quedaron sin país).`;
-  if (paisesNoEncontrados.size > 0) {
-    const resumen = [...paisesNoEncontrados.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([p, n]) => `${p} ×${n}`)
-      .join(", ");
-    detalle += ` PAÍSES NO ENCONTRADOS (quedaron sin nacionalidad): ${resumen}`;
-  }
-  return detalle;
+  return cerrarInforme(
+    { tipo: "jugadores", fichero: selected, importados, omitidos, errores, sinPais },
+    paisesNoEncontrados,
+    filasConError,
+  );
 }
 
 /**
@@ -369,8 +432,10 @@ export async function importarEntrenadoresCSV(rutaPredefinida?: string): Promise
 
   let importados = 0, omitidos = 0, errores = 0, sinPais = 0;
   const paisesNoEncontrados = new Map<string, number>();
+  const filasConError: FilaConError[] = [];
+  const numeroFilaEnt = (idx: number) => idx + 2;
 
-  for (const row of parsed.data) {
+  for (const [idx, row] of parsed.data.entries()) {
     try {
       const deportivo = String(row.nombre ?? "").trim();
       const claveEnt =
@@ -418,20 +483,19 @@ export async function importarEntrenadoresCSV(rutaPredefinida?: string): Promise
     } catch (e) {
       console.error("Error importando entrenador:", e);
       errores++;
+      filasConError.push({
+        fila: numeroFilaEnt(idx),
+        identificador: String(row.nombre ?? "(sin nombre)").trim(),
+        error: String(e).slice(0, 300),
+      });
     }
   }
 
-  let detalle = `${importados} entrenadores importados, ${omitidos} omitidos (ya existían), ${errores} errores.`;
-  if (sinPais > 0) detalle += ` ${sinPais} sin nacionalidad en el CSV (quedaron sin país).`;
-  if (paisesNoEncontrados.size > 0) {
-    const resumen = [...paisesNoEncontrados.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([p, n]) => `${p} ×${n}`)
-      .join(", ");
-    detalle += ` PAÍSES NO ENCONTRADOS (quedaron sin nacionalidad): ${resumen}`;
-  }
-  return detalle;
+  return cerrarInforme(
+    { tipo: "entrenadores", fichero: selected, importados, omitidos, errores, sinPais },
+    paisesNoEncontrados,
+    filasConError,
+  );
 }
 
 /**
@@ -491,8 +555,10 @@ export async function importarCompeticionesCSV(rutaPredefinida?: string): Promis
 
   let importadas = 0, omitidas = 0, errores = 0, sinPais = 0;
   const paisesNoEncontrados = new Map<string, number>();
+  const filasConError: FilaConError[] = [];
+  const numeroFilaComp = (idx: number) => idx + 2;
 
-  for (const row of parsed.data) {
+  for (const [idx, row] of parsed.data.entries()) {
     try {
       const nombre = String(row.nombre ?? "").trim();
       if (!nombre) { omitidas++; continue; }
@@ -545,18 +611,17 @@ export async function importarCompeticionesCSV(rutaPredefinida?: string): Promis
     } catch (e) {
       console.error("Error importando competición:", e);
       errores++;
+      filasConError.push({
+        fila: numeroFilaComp(idx),
+        identificador: String(row.nombre ?? "(sin nombre)").trim(),
+        error: String(e).slice(0, 300),
+      });
     }
   }
 
-  let detalle = `${importadas} competiciones importadas, ${omitidas} omitidas (ya existían), ${errores} errores.`;
-  if (sinPais > 0) detalle += ` ${sinPais} sin país en el CSV (continental/mundial o dato ausente).`;
-  if (paisesNoEncontrados.size > 0) {
-    const resumen = [...paisesNoEncontrados.entries()]
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 5)
-      .map(([p, n]) => `${p} ×${n}`)
-      .join(", ");
-    detalle += ` PAÍSES NO ENCONTRADOS (quedaron sin país): ${resumen}`;
-  }
-  return detalle;
+  return cerrarInforme(
+    { tipo: "competiciones", fichero: selected, importados: importadas, omitidos: omitidas, errores, sinPais },
+    paisesNoEncontrados,
+    filasConError,
+  );
 }

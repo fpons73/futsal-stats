@@ -3,16 +3,18 @@ import { readDir } from "@tauri-apps/plugin-fs";
 import { open as abrirDialogo } from "@tauri-apps/plugin-dialog";
 import {
     Sparkles, FolderOpen, CheckCircle2, AlertTriangle, Loader2,
-    ArrowRight, FileText, X, Database,
+    ArrowRight, FileText, X, Database, FileSpreadsheet,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import { setPreferencia } from "../db";
 import {
     carpetaSugerida, guardarCarpetaDatos, leerCarpetaDatos,
 } from "../utils/carpetaDatos";
 import {
     importarEquiposCSV, importarCompeticionesCSV,
-    importarJugadoresCSV, importarEntrenadoresCSV,
+    importarJugadoresCSV, importarEntrenadoresCSV, ULTIMOS_INFORMES,
 } from "../utils/importadorMasivo";
+import { exportarInforme, informeTieneProblemas } from "../utils/informeImportacion";
 
 type EstadoPaso = "pendiente" | "activo" | "ok" | "error" | "omitido";
 
@@ -98,16 +100,38 @@ export default function Onboarding({ onSaltar }: { onSaltar: () => void }) {
     }, []);
 
     // Al tener carpeta, cuántos CSV reconocibles contiene (solo lectura).
+    // Si no hay ninguno en el nivel superior pero sí en una subcarpeta
+    // inmediata (p. ej. Futsal_Data dentro del proyecto), la adopta sola.
     useEffect(() => {
         if (!carpeta) return;
         setDetectados(null);
         (async () => {
+            const cuentaCsv = (entradas: { name: string; isFile: boolean }[]) =>
+                entradas.filter((e) => e.isFile && /Enciclopedia_Futsal_.*\.csv$/i.test(e.name)).length;
             try {
                 const entradas = await readDir(carpeta);
-                const csvs = entradas.filter(
-                    (e) => e.isFile && /Enciclopedia_Futsal_.*\.csv$/i.test(e.name),
-                );
-                setDetectados(csvs.length);
+                const directos = cuentaCsv(entradas);
+                if (directos > 0) {
+                    setDetectados(directos);
+                    setErrorCarpeta(null);
+                    return;
+                }
+                // Búsqueda en subcarpetas inmediatas: adoptar la que más CSV tenga.
+                let mejor: { ruta: string; n: number } | null = null;
+                for (const e of entradas) {
+                    if (!e.isDirectory || !e.name || e.name.startsWith(".")) continue;
+                    try {
+                        const sub = await readDir(`${carpeta}${carpeta.includes("\\") ? "\\" : "/"}${e.name}`);
+                        const n = cuentaCsv(sub);
+                        if (n > 0 && (!mejor || n > mejor.n)) mejor = { ruta: `${carpeta}${carpeta.includes("\\") ? "\\" : "/"}${e.name}`, n };
+                    } catch { /* subcarpeta ilegible: ignorar */ }
+                }
+                if (mejor) {
+                    setCarpeta(mejor.ruta);
+                    setErrorCarpeta(null);
+                    return;
+                }
+                setDetectados(0);
                 setErrorCarpeta(null);
             } catch {
                 setDetectados(null);
@@ -147,6 +171,14 @@ export default function Onboarding({ onSaltar }: { onSaltar: () => void }) {
             }
         }
         await setPreferencia("onboarding_completado", new Date().toISOString());
+        // Primera copia de seguridad real: la automática del arranque guardó la
+        // BD vacía, así que la copia útil nace aquí, con los datos importados.
+        try {
+            await invoke("crear_backup_bd");
+        } catch {
+            /* No bloquear la salida por un fallo de backup; el usuario puede
+               crearla desde Configuración y la copia diaria de mañana cubrirá. */
+        }
         setEjecutando(false);
     };
 
@@ -248,6 +280,22 @@ export default function Onboarding({ onSaltar }: { onSaltar: () => void }) {
                                     <p key={k}><b className="capitalize">{k}</b>: {v}</p>
                                 ))}
                             </div>
+                            {/* Informes exportables (tarea 1.2): los tipos con avisos
+                                permiten descargar el detalle completo en CSV. */}
+                            {Object.keys(ULTIMOS_INFORMES).filter(t => informeTieneProblemas(ULTIMOS_INFORMES[t])).length > 0 && (
+                                <div className="mt-3 pt-2 border-t border-white/10 flex items-center gap-2 flex-wrap">
+                                    <span className="text-warning/80">Importaciones con avisos — exportar detalle:</span>
+                                    {Object.keys(ULTIMOS_INFORMES)
+                                        .filter(t => informeTieneProblemas(ULTIMOS_INFORMES[t]))
+                                        .map(t => (
+                                            <button key={t}
+                                                onClick={() => exportarInforme(ULTIMOS_INFORMES[t], "csv")}
+                                                className="px-2.5 py-1 bg-warning/15 hover:bg-warning/25 text-warning border border-warning/30 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-colors">
+                                                <FileSpreadsheet size={11} /> {t}
+                                            </button>
+                                        ))}
+                                </div>
+                            )}
                         </details>
                     )}
                 </div>
