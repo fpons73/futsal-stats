@@ -1,10 +1,11 @@
 import { useState } from "react";
-import { Database as DbIcon, Download, CheckCircle, AlertCircle, Upload, Calendar } from "lucide-react";
+import { Database as DbIcon, Download, CheckCircle, AlertCircle, Upload, Calendar, FileWarning, FileSpreadsheet } from "lucide-react";
 import Database from "@tauri-apps/plugin-sql";
 import { toast } from "../components/Toast";
 import { useEdicion } from "../context/EdicionContext";
 import { importarCalendarioCSV, importarCalendarioTexto } from "../utils/importadorCalendario";
-import { importarEquiposCSV, importarJugadoresCSV, importarEntrenadoresCSV, importarCompeticionesCSV } from "../utils/importadorMasivo";
+import { importarEquiposCSV, importarJugadoresCSV, importarEntrenadoresCSV, importarCompeticionesCSV, ULTIMOS_INFORMES } from "../utils/importadorMasivo";
+import { exportarInforme, informeTieneProblemas, InformeImportacion } from "../utils/informeImportacion";
 import { generarRoundRobin, asignarPabellones, asignarFechas } from "../utils/generadorCalendario";
 import { seedConfederacionesFutsal } from "../utils/seedConfederaciones";
 import { seedCompeticionesFutsal } from "../utils/seedCompeticionesFutsal";
@@ -15,6 +16,22 @@ export default function Importar() {
   const [cargando, setCargando] = useState(false);
   const [resultado, setResultado] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Último informe con problemas (tarea 1.2): habilita "Exportar informe".
+  const [informe, setInforme] = useState<InformeImportacion | null>(null);
+
+  /** Envuelve una importación masiva y recuerda su informe si trae problemas. */
+  const ejecutarConInforme = async (tipo: string, accion: () => Promise<string>) => {
+    setCargando(true); setError(null); setResultado(null); setInforme(null);
+    try {
+      const res = await accion();
+      setResultado(res);
+      toast.info(res);
+      const ultimo = ULTIMOS_INFORMES[tipo];
+      if (ultimo && informeTieneProblemas(ultimo)) setInforme(ultimo);
+    } catch (e) {
+      if (!avisarSiRutaDenegada(e)) setError(String(e));
+    } finally { setCargando(false); }
+  };
 
   const handleImportarCalendarioCSV = async () => {
     if (!edicionActiva) { setError("Selecciona una edición primero"); return; }
@@ -42,49 +59,13 @@ export default function Importar() {
     } finally { setCargando(false); }
   };
 
-  const handleImportarEquipos = async () => {
-    setCargando(true); setError(null); setResultado(null);
-    try {
-      const res = await importarEquiposCSV();
-      setResultado(res);
-      toast.info(res);
-    } catch (e) {
-      if (!avisarSiRutaDenegada(e)) setError(String(e));
-    } finally { setCargando(false); }
-  };
+  const handleImportarEquipos = () => ejecutarConInforme("equipos", () => importarEquiposCSV());
 
-  const handleImportarJugadores = async () => {
-    setCargando(true); setError(null); setResultado(null);
-    try {
-      const res = await importarJugadoresCSV();
-      setResultado(res);
-      toast.info(res);
-    } catch (e) {
-      if (!avisarSiRutaDenegada(e)) setError(String(e));
-    } finally { setCargando(false); }
-  };
+  const handleImportarJugadores = () => ejecutarConInforme("jugadores", () => importarJugadoresCSV());
 
-  const handleImportarEntrenadores = async () => {
-    setCargando(true); setError(null); setResultado(null);
-    try {
-      const res = await importarEntrenadoresCSV();
-      setResultado(res);
-      toast.info(res);
-    } catch (e) {
-      if (!avisarSiRutaDenegada(e)) setError(String(e));
-    } finally { setCargando(false); }
-  };
+  const handleImportarEntrenadores = () => ejecutarConInforme("entrenadores", () => importarEntrenadoresCSV());
 
-  const handleImportarCompeticiones = async () => {
-    setCargando(true); setError(null); setResultado(null);
-    try {
-      const res = await importarCompeticionesCSV();
-      setResultado(res);
-      toast.info(res);
-    } catch (e) {
-      if (!avisarSiRutaDenegada(e)) setError(String(e));
-    } finally { setCargando(false); }
-  };
+  const handleImportarCompeticiones = () => ejecutarConInforme("competiciones", () => importarCompeticionesCSV());
 
   const handleCargarSeeds = async () => {
     setCargando(true); setError(null);
@@ -199,6 +180,32 @@ export default function Importar() {
       {resultado && (
         <div className="bg-green-950/20 border border-green-500/30 rounded-lg p-3 text-green-400 text-sm flex items-center gap-2">
           <CheckCircle size={16} /> {resultado}
+        </div>
+      )}
+      {informe && (
+        <div className="bg-amber-950/20 border border-amber-500/30 rounded-xl p-4 space-y-3">
+          <div className="flex items-center gap-2 text-amber-400 text-sm font-bold">
+            <FileWarning size={16} />
+            La importación terminó con avisos: {informe.errores} error(es),
+            {" "}{informe.paisesNoEncontrados.length} país(es) del CSV sin coincidencia.
+          </div>
+          {informe.paisesNoEncontrados.length > 0 && (
+            <p className="text-xs text-silver/50">
+              Países afectados: {informe.paisesNoEncontrados.slice(0, 8).map(p => `${p.pais} ×${p.filas}`).join(" · ")}
+              {informe.paisesNoEncontrados.length > 8 && " …"}
+            </p>
+          )}
+          <div className="flex items-center gap-3 flex-wrap">
+            <span className="text-xs text-silver/40">Exportar el detalle completo:</span>
+            <button onClick={() => exportarInforme(informe, "csv")} disabled={cargando}
+              className="px-4 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-40">
+              <FileSpreadsheet size={14} /> CSV
+            </button>
+            <button onClick={() => exportarInforme(informe, "json")} disabled={cargando}
+              className="px-4 py-2 bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-500/30 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors disabled:opacity-40">
+              <FileSpreadsheet size={14} /> JSON
+            </button>
+          </div>
         </div>
       )}
       {error && (
