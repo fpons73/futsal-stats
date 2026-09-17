@@ -1,9 +1,11 @@
 import { useState, useEffect } from "react";
 import { HashRouter as Router, Routes, Route } from "react-router-dom";
+import Onboarding from "./components/Onboarding";
+import { PantallaRecuperacion } from "./components/PantallaRecuperacion";
 import { ThemeProvider } from "./context/ThemeContext";
 import { EdicionProvider } from "./context/EdicionContext";
 import { ModoProvider } from "./context/ModoContext";
-import { iniciarBaseDeDatos } from "./db";
+import { iniciarBaseDeDatos, esBaseVacia, getPreferencia } from "./db";
 import { aplicarCarpetaDatosAlArranque } from "./utils/carpetaDatos";
 import Sidebar from "./components/Sidebar";
 import { ToastContainer } from "./components/Toast";
@@ -32,18 +34,77 @@ import Configuracion from "./pages/Configuracion";
 function App() {
   const [dbReady, setDbReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Asistente de primera ejecución: solo con BD vacía y sin completar antes.
+  const [onboarding, setOnboarding] = useState(false);
+  // Recuperación de BD corrupta (tarea 1.4): diagnóstico y oferta de restaurar.
+  const [recuperacion, setRecuperacion] = useState(false);
 
   useEffect(() => {
     iniciarBaseDeDatos()
       // Tras iniciar la BD, aplicar la carpeta de datos configurada (si la hay)
       // para que fs y el protocolo de assets la permitan desde el primer render.
       .then(() => aplicarCarpetaDatosAlArranque())
+      .then(async () => {
+        // Comprobación PROACTIVA (tarea 1.4): SQLite es resiliente y la app puede
+        // arrancar "bien" con páginas dañadas hasta que una consulta las pisa.
+        // El integrity_check sobre ~7 MB tarda milisegundos: se hace en cada
+        // arranque y, si detecta corrupción, se ofrece restaurar la última copia
+        // ANTES de que el usuario trabaje sobre una BD herida.
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          const diag = await invoke<{
+            existe: boolean; integridad: string; esquema_ok: boolean; ultima_copia: string | null;
+          }>("diagnosticar_bd");
+          if (diag.existe && (!diag.esquema_ok || diag.integridad !== "ok")) {
+            setError(diag.integridad.slice(0, 200));
+            setRecuperacion(true);
+            return; // no marcar dbReady: la pantalla de recuperación manda
+          }
+        } catch {
+          // Si el diagnóstico falla (comando ausente, etc.) seguimos como siempre.
+        }
+        try {
+          const completado = await getPreferencia("onboarding_completado");
+          if (!completado && (await esBaseVacia())) setOnboarding(true);
+        } catch {
+          // Sin onboarding no bloqueamos el arranque normal.
+        }
+      })
       .then(() => setDbReady(true))
-      .catch((e) => {
+      .catch(async (e) => {
         console.error("Error iniciando DB:", e);
         setError(e?.message || "Error al inicializar la base de datos");
+        // Camino reactivo: si iniciarBaseDeDatos revienta, mismo diagnóstico.
+        try {
+          const { invoke } = await import("@tauri-apps/api/core");
+          const diag = await invoke<{
+            existe: boolean; integridad: string; esquema_ok: boolean; ultima_copia: string | null;
+          }>("diagnosticar_bd");
+          if (diag.existe && (!diag.esquema_ok || diag.integridad !== "ok")) {
+            setRecuperacion(true);
+          }
+        } catch {
+          // Sin diagnóstico nos quedamos en la pantalla de error clásica.
+        }
       });
   }, []);
+
+  // La recuperación va ANTES que la pantalla de error clásica: cuando el
+  // diagnóstico confirma corrupción, la oferta de restaurar manda.
+  if (recuperacion) {
+    return (
+      <ThemeProvider>
+        <PantallaRecuperacion
+          error={error}
+          onRestaurado={() => {
+            setError(null);
+            setRecuperacion(false);
+            window.location.reload();
+          }}
+        />
+      </ThemeProvider>
+    );
+  }
 
   if (error) {
     return (
@@ -68,6 +129,14 @@ function App() {
           <p className="text-silver/40 text-xs mt-2">Cargando base de datos y configuración</p>
         </div>
       </div>
+    );
+  }
+
+  if (onboarding) {
+    return (
+      <ThemeProvider>
+        <Onboarding onSaltar={() => setOnboarding(false)} />
+      </ThemeProvider>
     );
   }
 

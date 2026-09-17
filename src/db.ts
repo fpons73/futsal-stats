@@ -56,6 +56,22 @@ export async function iniciarBaseDeDatos() {
   }
 }
 
+/** ¿Base de datos recién creada? True si no hay ni una Persona ni un Equipo.
+ *  Decide si la app muestra el asistente de primera ejecución (Onboarding). */
+export async function esBaseVacia(): Promise<boolean> {
+  try {
+    const db = await Database.load(DB_NAME);
+    const rows = await db.select<{ p: number; e: number }[]>(
+      "SELECT (SELECT COUNT(*) FROM Persona) AS p, (SELECT COUNT(*) FROM Equipo) AS e"
+    );
+    return (rows[0]?.p ?? 0) === 0 && (rows[0]?.e ?? 0) === 0;
+  } catch (e) {
+    // Si no podemos consultar, no bloqueamos el arranque con el onboarding.
+    console.error("Error comprobando si la BD está vacía:", e);
+    return false;
+  }
+}
+
 export async function getPreferencia(clave: string, valorDefecto: string = ""): Promise<string> {
   try {
     const db = await Database.load(DB_NAME);
