@@ -4,6 +4,19 @@ Formato basado en [Keep a Changelog](https://keepachangelog.com/es-ES/1.1.0/)
 y [Versionado Semántico](https://semver.org/lang/es/). Los detalles de cada
 tarea están en [`docs/milestone-1.0.md`](./docs/milestone-1.0.md).
 
+## [Sin publicar]
+
+### Preparación del cierre 1.0.0
+
+- Runbook de cierre de la 1.0.0 (`docs/cierre-v1-0-0.md`): validación en VM
+  del instalador de la rc (hash precalculado), bump de versión, regeneración
+  de notas y tag final con contingencia `rc.2`.
+- Workflow de release: los tags con sufijo (`-rc*`, `-beta*`) se publican
+  como **prerelease** automáticamente; las versiones estables no.
+- Instalador de la rc descargable desde el borrador de la release en CI.
+
+## [1.0.0-rc.1] — 2026-09-17
+
 ## [1.0.0-rc.1] — 2026-09-17
 
 Primera candidata a release: aplicación completa, instalable y con red de

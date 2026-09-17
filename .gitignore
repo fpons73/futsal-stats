@@ -48,3 +48,6 @@ pnpm-lock.yaml
 pnpm-workspace.yaml
 logs_*.txt
 *.log
+
+# Instaladores descargados para la prueba en VM (no versionar binarios)
+.rc-artifacts/

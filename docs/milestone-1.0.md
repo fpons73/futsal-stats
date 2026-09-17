@@ -22,6 +22,11 @@
 
 **Criterio de salida**: un instalador que otra persona instala y usa.
 
+**Cierre**: la rc `v1.0.0-rc.1` está etiquetada con instalador generado en CI;
+el paso a `1.0.0` final está documentado paso a paso en
+[`docs/cierre-v1-0-0.md`](./cierre-v1-0-0.md) (validación en VM → bump →
+notas → tag → publicación, con contingencia `rc.2`).
+
 ## Bloque 1 — Primera experiencia y datos (3-4 días)
 
 | # | Tarea | Detalle | Verificación |
