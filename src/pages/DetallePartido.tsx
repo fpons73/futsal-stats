@@ -711,7 +711,12 @@ export default function DetallePartido() {
                         filas: filasPrevias,
                     };
                 }
-            } catch (e) { console.error("No se pudo tomar snapshot para deshacer:", e); }
+            } catch (e) {
+                // Silencio JUSTIFICADO: el snapshot es una optimización del undo;
+                // si falla, el guardado sigue y tiene su propio toast de error.
+                // Abortar aquí dejaría el acta a medio guardar por culpa del undo.
+                console.error("No se pudo tomar snapshot para deshacer:", e);
+            }
 
             await invoke("guardar_acta_transaccion", {
                 partidoId: Number(id),

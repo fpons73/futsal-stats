@@ -124,6 +124,7 @@ export default function Importar() {
 
       let importados = 0;
       let fallos = 0;
+      let ultimoError: unknown = null;
       for (const p of conFechas) {
         try {
           await db.execute(`
@@ -133,14 +134,16 @@ export default function Importar() {
           importados++;
         } catch (e) {
           console.error("Error insertando partido:", e);
+          ultimoError = e; // el toast final muestra el primer error real
           fallos++;
         }
       }
       setResultado(`Calendario generado: ${importados} partidos`);
       if (fallos > 0) {
-        toast.warning(`${fallos} partidos no se pudieron insertar (revisa la consola)`);
+        const primero = String(ultimoError ?? "").slice(0, 140);
+        toast.warning(`${fallos} partido(s) no se pudieron insertar. Primer error: ${primero}`);
       }
-      toast.success(`Calendario generado: ${importados} partidos`);
+      if (importados > 0) toast.success(`Calendario generado: ${importados} partidos`);
       refrescar();
     } catch (e) {
       setError(String(e));

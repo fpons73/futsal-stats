@@ -1,9 +1,11 @@
-import { useState, useEffect } from "react";
-import { Settings, Trash2, Database as DbIcon, Check, Sparkles, Calendar, Users, FileClock, FolderOpen } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Settings, Trash2, Database as DbIcon, Check, Sparkles, Calendar, Users, FileClock, FolderOpen, Save, RotateCcw, History } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import { open as abrirDialogo } from "@tauri-apps/plugin-dialog";
 import { ModalBuscarDuplicados } from "../components/ModalBuscarDuplicados";
 import { useConfirm } from "../components/ConfirmDialog";
+import { getPreferencia } from "../db";
 import { geminiService, DEFAULT_GEMINI_MODEL } from "../services/geminiService";
 import { exportarPersonasCSV, exportarEquiposCSV } from "../utils/csvExporters";
 import { seedConfederacionesFutsal } from "../utils/seedConfederaciones";
@@ -31,6 +33,22 @@ export default function Configuracion() {
   const [alcanzable, setAlcanzable] = useState<boolean | null>(null);
   // Carpeta sugerida según contexto (raíz del proyecto en dev, Documentos en producción).
   const [sugerida, setSugerida] = useState("");
+  // Copias de seguridad (tarea 1.3): lista, retención y estado de acciones.
+  interface BackupInfo { ruta: string; nombre: string; bytes: number; fecha: string; }
+  const [backups, setBackups] = useState<BackupInfo[]>([]);
+  const [retencionBackups, setRetencionBackups] = useState<number | "">("");
+  const [accionBackup, setAccionBackup] = useState(false);
+
+  const recargarBackups = useCallback(async () => {
+    try {
+      setBackups(await invoke<BackupInfo[]>("listar_backups_bd"));
+    } catch (e) {
+      // Visible: si el listado falla la tarjeta diría "no hay copias" y el
+      // usuario podría creer que está sin protección cuando es un fallo de lectura.
+      console.error("listar_backups_bd falló:", e);
+      toast.warning("No se pudo leer la lista de copias de seguridad.");
+    }
+  }, []);
   // Confirmación temática para acciones destructivas (sustituye a ask()/message() nativos).
   const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
 
@@ -46,7 +64,13 @@ export default function Configuracion() {
       if (c) esRutaAlcanzable(c).then(setAlcanzable);
     });
     carpetaSugerida().then(setSugerida);
-  }, []);
+    recargarBackups();
+    // Retención guardada por Rust en Preferencia (fallback 7 = defecto del comando).
+    getPreferencia("backups_retencion").then(v => {
+      const n = parseInt(v, 10);
+      setRetencionBackups(Number.isFinite(n) && n >= 1 ? n : 7);
+    });
+  }, [recargarBackups]);
 
   const guardarConfiguracionIA = () => {
     geminiService.setApiKey(apiKey);
@@ -100,6 +124,58 @@ export default function Configuracion() {
       toast.success(`Carpeta de datos configurada: ${sugerida}`);
     } catch (e) {
       toast.error(`No se pudo configurar la carpeta: ${e}`);
+    }
+  };
+
+  // --- Backups de la BD (tarea 1.3) ---
+  const crearBackupAhora = async () => {
+    setAccionBackup(true);
+    try {
+      const ruta = await invoke<string>("crear_backup_bd");
+      toast.success(`Copia creada: ${ruta.split(/[\\\\/]/).pop()}`);
+      await recargarBackups();
+    } catch (e) {
+      toast.error(`No se pudo crear la copia: ${e}`);
+    } finally {
+      setAccionBackup(false);
+    }
+  };
+
+  const restaurarBackup = async (b: BackupInfo) => {
+    const ok = await confirmar({
+      titulo: "Restaurar copia",
+      mensaje: `La base de datos actual se reemplazará por la copia del ${b.fecha}.\n\nSe cerrará la aplicación para completar la restauración. ¿Continuar?`,
+      textoConfirmar: "Restaurar y reiniciar",
+      textoCancelar: "Cancelar",
+      peligroso: true,
+    });
+    if (!ok) return;
+    setAccionBackup(true);
+    try {
+      await invoke("restaurar_backup_bd", { rutaCopia: b.ruta });
+      toast.success("Copia restaurada — reiniciando…");
+      setTimeout(() => window.location.reload(), 800);
+    } catch (e) {
+      toast.error(`No se pudo restaurar: ${e}`);
+      setAccionBackup(false);
+    }
+  };
+
+  const guardarRetencionBackups = async () => {
+    if (retencionBackups === "") return;
+    setAccionBackup(true);
+    try {
+      const borradas = await invoke<number>("guardar_retencion_backups", { retener: Number(retencionBackups) });
+      toast.success(
+        borradas > 0
+          ? `Retención: ${retencionBackups} copias · ${borradas} vieja(s) eliminada(s)`
+          : `Retención: ${retencionBackups} copias`,
+      );
+      await recargarBackups();
+    } catch (e) {
+      toast.error(`No se pudo guardar la retención: ${e}`);
+    } finally {
+      setAccionBackup(false);
     }
   };
 
@@ -228,6 +304,48 @@ export default function Configuracion() {
           Sugerencia: <code className="text-gray-300">{sugerida || "…"}</code> (donde vive <code className="text-gray-300">Futsal_Data/</code> en desarrollo).
           El cambio se aplica al momento y persiste entre sesiones.
         </p>
+      </div>
+
+      {/* Copias de seguridad de la BD */}
+      <div className="bg-white/5 rounded-xl border border-white/10 p-5">
+        <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-1"><History size={18} className="text-orange" /> Copias de seguridad</h2>
+        <p className="text-xs text-gray-400/70 mb-3">
+          Copia automática diaria al arrancar la app (primera del día). Restaurar reemplaza
+          la base de datos actual y reinicia la aplicación.
+        </p>
+        <div className="flex items-center gap-3 flex-wrap mb-3">
+          <button onClick={crearBackupAhora} disabled={accionBackup}
+            className="px-4 py-2 bg-orange/20 hover:bg-orange/30 text-orange border border-orange/30 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-40">
+            <Save size={16} /> Crear copia ahora
+          </button>
+          <label className="text-xs font-bold text-gray-400 uppercase">Conservar</label>
+          <input type="number" min={1} max={365} value={retencionBackups}
+            onChange={e => setRetencionBackups(e.target.value === "" ? "" : Number(e.target.value))}
+            className="w-20 bg-gray-900 border border-gray-700 rounded px-3 py-2 text-white outline-none focus:border-orange" />
+          <button onClick={guardarRetencionBackups} disabled={accionBackup || retencionBackups === ""}
+            className="px-3 py-2 bg-gray-800/50 hover:bg-gray-800 text-gray-300 border border-gray-700 rounded-lg font-bold flex items-center gap-2 transition-colors disabled:opacity-40">
+            <Check size={16} /> Guardar retención
+          </button>
+        </div>
+        {backups.length === 0 ? (
+          <p className="text-xs text-gray-400/50">Todavía no hay copias — se crearán automáticamente o con "Crear copia ahora".</p>
+        ) : (
+          <div className="space-y-2 max-h-64 overflow-auto">
+            {backups.map(b => (
+              <div key={b.ruta} className="flex items-center gap-3 bg-gray-900/60 border border-gray-700/60 rounded-lg px-3 py-2">
+                <History size={14} className="text-silver/40 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-gray-200 truncate">{b.fecha}</p>
+                  <p className="text-[11px] text-gray-400/60 truncate">{b.nombre} · {(b.bytes / 1024 / 1024).toFixed(1)} MB</p>
+                </div>
+                <button onClick={() => restaurarBackup(b)} disabled={accionBackup}
+                  className="px-3 py-1.5 bg-warning/15 hover:bg-warning/25 text-warning border border-warning/30 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-colors disabled:opacity-40">
+                  <RotateCcw size={12} /> Restaurar
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Herramientas */}
