@@ -2,6 +2,14 @@ import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
+/** Todos los comandos registrados en el invoke_handler de lib.rs. */
+function comandosRust(): string[] {
+    const lib = readFileSync(join(RAIZ, "src-tauri/src/lib.rs"), "utf-8");
+    const bloque = lib.match(/invoke_handler\(tauri::generate_handler!\[([\s\S]*?)\]\)/);
+    if (!bloque) throw new Error("no se encontró invoke_handler en lib.rs");
+    return [...bloque[1].matchAll(/([a-z_0-9]+)/g)].map((m) => m[1]);
+}
+
 /**
  * Regresión del guardado del acta: los ids que vienen de la ruta
  * (#/partido/266) son STRINGS y los comandos Tauri exigen i64 estrictos.
@@ -46,5 +54,42 @@ describe("args de comandos Tauri (regresión i64 vs string de ruta)", () => {
         const fuente = readFileSync(join(RAIZ, "src/pages/DetallePartido.tsx"), "utf-8");
         expect(fuente).toContain('invoke("guardar_acta_transaccion"');
         expect(fuente).toContain("partidoId: Number(id)");
+    });
+
+    it("todo comando invocado desde el frontend está registrado en lib.rs", () => {
+        const registrados = new Set(comandosRust());
+        const invocados: Array<{ comando: string; sitio: string }> = [];
+
+        for (const ruta of ficherosFuente(join(RAIZ, "src"))) {
+            const relativo = ruta.slice(RAIZ.length);
+            readFileSync(ruta, "utf-8").split("\n").forEach((linea, i) => {
+                for (const m of linea.matchAll(/invoke(?:<[^>]*>)?\(\s*["']([a-z_0-9]+)["']/g)) {
+                    invocados.push({ comando: m[1], sitio: `${relativo}:${i + 1}` });
+                }
+            });
+        }
+
+        expect(invocados.length, "debe haber comandos invocados que auditar").toBeGreaterThan(0);
+        const noRegistrados = invocados.filter((i) => !registrados.has(i.comando));
+        expect(
+            noRegistrados.map((i) => `${i.sitio} → "${i.comando}"`),
+            "invokes de comandos no registrados en generate_handler — fallarían en runtime",
+        ).toEqual([]);
+    });
+
+    it("todo comando registrado salvo los que solo usan scripts E2E se invoca desde src/", () => {
+        // Dirección inversa: un comando muerto en lib.rs (registrado y sin uso)
+        // es señal de API obsoleta. fetch_html se excluye porque es punto de
+        // partida documentado para tooling externo.
+        const registrados = comandosRust().filter((c) => c !== "fetch_html");
+        const invocados = new Set<string>();
+        for (const ruta of ficherosFuente(join(RAIZ, "src"))) {
+            const contenido = readFileSync(ruta, "utf-8");
+            for (const m of contenido.matchAll(/invoke(?:<[^>]*>)?\(\s*["']([a-z_0-9]+)["']/g)) {
+                invocados.add(m[1]);
+            }
+        }
+        const muertos = registrados.filter((c) => !invocados.has(c));
+        expect(muertos, "comandos registrados sin uso en el frontend").toEqual([]);
     });
 });
