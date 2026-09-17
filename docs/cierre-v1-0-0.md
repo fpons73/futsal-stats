@@ -10,11 +10,14 @@ tag final → publicar.
 ## Paso 1 — Validación en máquina limpia (tarea 0.2)
 
 El binario a probar es **el de CI, no uno local**. Ya descargado con hash
-precalculado:
+precalculado y **verificado tras la publicación** (descarga anónima del
+asset → mismo hash):
 
 ```
 Fichero : Global.Futsal.Stats_1.0.0-rc.1_x64-setup.exe  (10,9 MB)
 SHA-256 : ba8df7fcaa53e571777abd99251dd533aa10dfb027220c92cf89f2a00f807a4a
+Publicada: https://github.com/fpons73/futsal-stats/releases/tag/v1.0.0-rc.1
+          (prerelease; URL directa de descarga verificada sin autenticar)
 ```
 
 > El hash se puede recalcular en cualquier momento:

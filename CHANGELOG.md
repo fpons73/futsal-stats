@@ -13,7 +13,9 @@ tarea están en [`docs/milestone-1.0.md`](./docs/milestone-1.0.md).
   de notas y tag final con contingencia `rc.2`.
 - Workflow de release: los tags con sufijo (`-rc*`, `-beta*`) se publican
   como **prerelease** automáticamente; las versiones estables no.
-- Instalador de la rc descargable desde el borrador de la release en CI.
+- Release candidata **v1.0.0-rc.1 publicada como prerelease** con el
+  instalador NSIS descargable públicamente (SHA-256 verificado tras la
+  publicación con descarga anónima).
 
 ## [1.0.0-rc.1] — 2026-09-17
 
