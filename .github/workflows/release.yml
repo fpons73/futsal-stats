@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Etiqueta del release (vacío = versión de tauri.conf.json)"
+        required: false
+        default: ""
+
+# Necesario para crear el borrador de Release con los instaladores adjuntos
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Instalador Windows (NSIS + MSI)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Instalar dependencias del frontend
+        run: npm ci
+
+      # En push de tag usa la etiqueta tal cual; en dispatch manual la entrada
+      # tag_name o, si está vacía, la versión de tauri.conf.json.
+      - name: Determinar etiqueta del release
+        id: tag
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          elif [ -n "${{ inputs.tag_name }}" ]; then
+            echo "tag=${{ inputs.tag_name }}" >> "$GITHUB_OUTPUT"
+          else
+            V=$(node -p "require('./src-tauri/tauri.conf.json').version")
+            echo "tag=v$V" >> "$GITHUB_OUTPUT"
+          fi
+
+      # beforeBuildCommand (npm run build: tsc + vite) corre dentro de la acción.
+      # Publica un DRAFT con los instaladores adjuntos: revisar, editar notas y
+      # publicar desde la UI de GitHub (proceso completo en CONTRIBUTING.md).
+      - name: Compilar instalador y crear borrador de Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ steps.tag.outputs.tag }}
+          releaseName: "Global Futsal Stats ${{ steps.tag.outputs.tag }}"
+          releaseBody: >
+            Instalador de Windows (NSIS `*_x64-setup.exe` y MSI equivalente).
+
+
+            **Instalación**: descarga `Global Futsal Stats_*_x64-setup.exe`, ejecútalo
+            y sigue el asistente. No requiere Node ni Rust (solo WebView2, incluido
+            en Windows 10/11 actualizados).
+
+
+            **Aviso de SmartScreen**: el binario aún no está firmado digitalmente, por
+            lo que Windows puede mostrar "aplicación no reconocida" — pulsa
+            *Más información* → *Ejecutar de todas formas*.
+          releaseDraft: true
+          prerelease: false

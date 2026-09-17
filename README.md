@@ -29,6 +29,44 @@ estadísticas de fútbol sala: competiciones, ediciones, equipos, jugadores, ent
 - **UX consistente**: tema claro/oscuro persistido, toasts en lugar de `alert()`,
   diálogos modales con foco atrapado y confirmaciones temáticas.
 
+## Instalación (usuarios)
+
+1. Descarga `Global Futsal Stats_X.Y.Z_x64-setup.exe` desde la página de
+   [Releases](https://github.com/fpons73/futsal-stats/releases).
+2. Ejecútalo y sigue el asistente. **Requisitos**: Windows 10 o superior con
+   WebView2 Runtime (ya incluido en Windows 10/11 actualizados; si falta, el
+   instalador lo descarga solo). No necesita Node, Rust ni permisos raros.
+3. **SmartScreen**: al no estar el binario firmado todavía, Windows mostrará
+   «Windows protegió tu equipo» — pulsa *Más información* → *Ejecutar de todas
+   formas*. Es el aviso estándar para apps sin certificado.
+
+### Primer uso
+
+- Al arrancar por primera vez, el **asistente de bienvenida** te ofrece elegir
+   la carpeta de datos (por defecto `Documentos\Global Futsal Stats`) y detecta
+   automáticamente los CSV de la enciclopedia (también en subcarpetas como
+   `Futsal_Data/`) para importarlos en orden de dependencias.
+- Ve a **Configuración → Herramientas de datos** para: cargar el catálogo
+   mundial de países (ISO + confederación FIFA), crear una copia de seguridad
+   o cambiar la carpeta de datos.
+- La app crea un **backup diario automático** de la base de datos en el perfil
+   de usuario y ofrece restaurarlo desde Configuración.
+
+### Solución de problemas
+
+- **No arranca / pantalla en blanco**: abre el panel de errores (icono de la
+   barra lateral) y exporta el registro; incluye ese CSV al reportar.
+- **Escudos o fotos que no se ven**: las rutas de imagen de tu BD apuntan a
+   carpetas locales que no existen en tu máquina — la app muestra iniciales en
+   su lugar; corrige la ruta en la ficha del equipo/jugador.
+- **Importación con avisos**: el panel ámbar de la página Importar resume los
+   problemas y permite exportar el informe completo en CSV/JSON.
+- **Base de datos dañada**: la app la detecta al arrancar y ofrece restaurar
+   la última copia verificada automáticamente.
+
+¿Encontraste un bug? Abre un [issue](https://github.com/fpons73/futsal-stats/issues)
+con los pasos para reproducirlo y, si aplica, el informe exportado.
+
 ## Capturas de pantalla
 
 | Dashboard | Partidos | Pizarra |
@@ -146,7 +184,7 @@ Detalles importantes:
 ## Tests y CI
 
 ```bash
-npm test                        # 236 tests de frontend (Vitest)
+npm test                        # 340+ tests de frontend (Vitest)
 cd src-tauri && cargo test      # migraciones + tests de la lib
 ```
 
@@ -154,6 +192,11 @@ GitHub Actions (`.github/workflows/ci.yml`) ejecuta en cada push a `main`:
 
 - **Frontend**: `tsc --noEmit` + Vitest.
 - **Rust**: migraciones sobre BD virgen + tests unitarios de la lib.
+
+Adicionalmente, [`.github/workflows/release.yml`](./.github/workflows/release.yml)
+compila el instalador Windows (NSIS + MSI) en cada tag `v*` y lo adjunta a un
+[Release](https://github.com/fpons73/futsal-stats/releases) borrador — proceso
+completo en [CONTRIBUTING.md](./CONTRIBUTING.md).
 
 ## Desarrollo y verificación E2E
 

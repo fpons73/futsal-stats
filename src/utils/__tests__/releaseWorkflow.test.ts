@@ -1,0 +1,22 @@
+// Workflow de release (release.yml): válido, con los jobs esperados.
+import { readFileSync } from "node:fs";
+import { it, expect } from "vitest";
+
+const yaml = readFileSync(".github/workflows/release.yml", "utf8");
+
+it("declara disparadores por tag v* y dispatch manual", () => {
+    expect(yaml).toMatch(/tags:\s*(\n\s*-\s*)?\[?"v\*/);
+    expect(yaml).toMatch(/workflow_dispatch:/);
+});
+
+it("compila en windows-latest y crea un borrador de Release", () => {
+    expect(yaml).toContain("windows-latest");
+    expect(yaml).toContain("tauri-apps/tauri-action@v0");
+    expect(yaml).toMatch(/releaseDraft:\s*true/);
+    expect(yaml).toContain("GITHUB_TOKEN");
+});
+
+it("usa la misma versión de Node y cache npm que la CI principal", () => {
+    expect(yaml).toMatch(/node-version:\s*22/);
+    expect(yaml).toContain("cache: npm");
+});

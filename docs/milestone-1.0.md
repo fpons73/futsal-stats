@@ -44,9 +44,9 @@
 
 | # | Tarea | Detalle | Verificación |
 |---|---|---|---|
-| 3.1 | **Job de release en CI** | Workflow que en tag `v*`: build NSIS + adjuntar a GitHub Release (draft). Sin firma de código por ahora (aviso de SmartScreen documentado en el README) | Tag de prueba → instalador adjunto al release |
-| 3.2 | **Canal de actualizaciones** | Decidir: (a) descarga manual desde Releases (suficiente para empezar) o (b) `tauri-plugin-updater`. Empezar por (a) | Documentar el proceso de release en CONTRIBUTING |
-| 3.3 | **README para usuarios (no para ti)** | Requisitos (Windows 10+, WebView2), qué hace la app, capturas, cómo importar datos, solución de problemas | Una persona ajena instala y carga datos siguiendo solo el README |
+| 3.1 | ✅ **Job de release en CI** — HECHO: `.github/workflows/release.yml` dispara en tag `v*` (y `workflow_dispatch` para regenerar sin tocar tags): `npm ci` + `tauri-action` en `windows-latest` → NSIS + MSI adjuntos a un **Release borrador** con cuerpo predefinido (instrucciones + aviso SmartScreen). Test estático permanente (`releaseWorkflow.test.ts`) blinda disparadores, runner y draft | Tag de prueba → instalador adjunto al release |
+| 3.2 | ✅ **Canal de actualizaciones** — HECHO: (a) descarga manual desde Releases (decisión documentada; sin `tauri-plugin-updater` en la 1.0). Proceso completo de release (versionado triple conf/Cargo/package, tag, draft, publicación, firma post-1.0) en `CONTRIBUTING.md` | Documentar el proceso de release en CONTRIBUTING |
+| 3.3 | ✅ **README para usuarios (no para ti)** — HECHO: sección «Instalación (usuarios)» con descarga desde Releases, requisitos (Windows 10+, WebView2 con descarga automática si falta), aviso SmartScreen paso a paso, «Primer uso» (asistente de bienvenida, catálogo de países, backups) y «Solución de problemas» (panel de errores, imágenes con iniciales, informes de importación, recuperación de BD) | Una persona ajena instala y carga datos siguiendo solo el README |
 
 ## Fuera de alcance del 1.0 (post-1.0)
 
