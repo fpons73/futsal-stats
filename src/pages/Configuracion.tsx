@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Settings, Trash2, Database as DbIcon, Check, Sparkles, Calendar, Users, FileClock, FolderOpen, Save, RotateCcw, History, Flag } from "lucide-react";
+import { Settings, Trash2, Database as DbIcon, Check, Sparkles, Calendar, Users, FileClock, FolderOpen, Save, RotateCcw, History, Flag, RefreshCw, Download } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
 import { open as abrirDialogo } from "@tauri-apps/plugin-dialog";
@@ -15,6 +15,10 @@ import {
     leerCarpetaDatos, guardarCarpetaDatos, esRutaAlcanzable, carpetaSugerida,
 } from "../utils/carpetaDatos";
 import { toast } from "../components/Toast";
+import {
+    comprobarActualizacion, instalarActualizacion, obtenerVersionActual,
+    type EstadoActualizacion, type ProgresoDescarga,
+} from "../services/updaterService";
 import {
     leerDiasRetencion, guardarDiasRetencion, restablecerDiasRetencion,
     barrerBorradoresAntiguos, listarBorradores,
@@ -39,6 +43,12 @@ export default function Configuracion() {
   const [backups, setBackups] = useState<BackupInfo[]>([]);
   const [retencionBackups, setRetencionBackups] = useState<number | "">("");
   const [accionBackup, setAccionBackup] = useState(false);
+  // Auto-actualizador (A2): estado de la comprobación y de la instalación.
+  const [estadoActualizacion, setEstadoActualizacion] = useState<EstadoActualizacion | null>(null);
+  const [versionActual, setVersionActual] = useState<string | null>(null);
+  const [comprobando, setComprobando] = useState(false);
+  const [instalando, setInstalando] = useState(false);
+  const [progreso, setProgreso] = useState<ProgresoDescarga | null>(null);
 
   const recargarBackups = useCallback(async () => {
     try {
@@ -50,8 +60,43 @@ export default function Configuracion() {
       toast.warning("No se pudo leer la lista de copias de seguridad.");
     }
   }, []);
+
   // Confirmación temática para acciones destructivas (sustituye a ask()/message() nativos).
   const { confirmar, dialogo: dialogoConfirmar } = useConfirm();
+
+  // Auto-actualizador (A2): búsqueda manual (reporta fallos al registro) e
+  // instalación con confirmación, progreso y reinicio.
+  const buscarActualizaciones = useCallback(async () => {
+    setComprobando(true);
+    setEstadoActualizacion(null);
+    const e = await comprobarActualizacion();
+    setEstadoActualizacion(e);
+    setComprobando(false);
+    if (e.disponible) toast.success(`Nueva versión ${e.version} disponible`);
+    else if (e.razon === "sin-actualizacion") toast.success("Estás en la última versión");
+    else toast.warning("No se pudo comprobar: revisa tu conexión y vuelve a intentarlo.");
+  }, []);
+
+  const instalarAhora = useCallback(async () => {
+    const ok = await confirmar({
+      titulo: `Actualizar a ${estadoActualizacion?.version ?? "la nueva versión"}`,
+      mensaje: "La actualización se descargará e instalará automáticamente y la aplicación se reiniciará para aplicarla. ¿Continuar?",
+      textoConfirmar: "Actualizar y reiniciar",
+      textoCancelar: "Cancelar",
+    });
+    if (!ok) return;
+    setInstalando(true);
+    setProgreso(null);
+    try {
+      await instalarActualizacion(setProgreso);
+      // Si el relaunch funciona, el proceso se cierra y no se llega aquí.
+    } catch (err) {
+      console.error("instalarActualizacion falló:", err);
+      setInstalando(false);
+      toast.error(`La actualización no pudo instalarse: ${err}`);
+    }
+  }, [confirmar, estadoActualizacion]);
+
 
   useEffect(() => {
     geminiService.loadPreferences().then(({ apiKey, model }) => {
@@ -66,6 +111,10 @@ export default function Configuracion() {
     });
     carpetaSugerida().then(setSugerida);
     recargarBackups();
+    // Versión instalada y estado inicial (la Sidebar ya comprobó silenciosamente;
+    // aquí se repite en silencio para pintar la card sin tocar el registro).
+    obtenerVersionActual().then(setVersionActual);
+    comprobarActualizacion({ silencioso: true }).then(setEstadoActualizacion);
     // Retención guardada por Rust en Preferencia (fallback 7 = defecto del comando).
     getPreferencia("backups_retencion").then(v => {
       const n = parseInt(v, 10);
@@ -302,7 +351,56 @@ export default function Configuracion() {
         </div>
       </div>
 
-      {/* Carpeta de datos */}
+      {/* Auto-actualizador (A2 del roadmap) */}
+      <div className="bg-white/5 rounded-xl border border-white/10 p-5">
+        <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-4"><RefreshCw size={18} className="text-sky-400" /> Actualizaciones</h2>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400">Versión instalada</span>
+            <span className="font-mono font-bold text-white">{versionActual ?? "—"}</span>
+          </div>
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-400">Estado</span>
+            {instalando ? (
+              <span className="font-bold text-sky-400 flex items-center gap-2">
+                Descargando{progreso?.porcentaje != null ? ` — ${progreso.porcentaje}%` : "…"}
+              </span>
+            ) : comprobando ? (
+              <span className="text-gray-400 flex items-center gap-2"><RefreshCw size={14} className="animate-spin" /> Comprobando…</span>
+            ) : estadoActualizacion?.disponible ? (
+              <span className="font-bold text-success">Nueva versión {estadoActualizacion.version} disponible</span>
+            ) : (
+              <span className="text-success">Estás en la última versión</span>
+            )}
+          </div>
+
+          {estadoActualizacion?.disponible && (
+            <div className="text-xs text-gray-400 bg-gray-900/60 border border-white/10 rounded-lg p-3 max-h-32 overflow-y-auto whitespace-pre-wrap">
+              {estadoActualizacion.notas || "Sin notas de la versión."}
+            </div>
+          )}
+
+          <div className="flex gap-2">
+            <button
+              onClick={buscarActualizaciones}
+              disabled={comprobando || instalando}
+              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-white rounded-lg font-bold flex items-center gap-2 transition-colors"
+            >
+              <RefreshCw size={16} className={comprobando ? "animate-spin" : ""} /> Buscar actualizaciones
+            </button>
+            {estadoActualizacion?.disponible && (
+              <button
+                onClick={instalarAhora}
+                disabled={comprobando || instalando}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg font-bold flex items-center gap-2 transition-colors"
+              >
+                <Download size={16} /> Actualizar a {estadoActualizacion.version}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white/5 rounded-xl border border-white/10 p-5">
         <h2 className="text-lg font-bold text-white flex items-center gap-2 mb-4"><FolderOpen size={18} className="text-emerald-400" /> Carpeta de datos</h2>
         <p className="text-xs text-gray-400/70 mb-3">

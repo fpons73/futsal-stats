@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { registroErrores } from "../utils/registroErrores";
 import { useEffect, useState } from "react";
+import { comprobarActualizacion, type EstadoActualizacion } from "../services/updaterService";
 import logo from "../assets/logo.png";
 import { useTheme } from "../context/ThemeContext";
 import { useEdicion } from "../context/EdicionContext";
@@ -67,6 +68,18 @@ export default function Sidebar({ alAbrirErrores }: SidebarProps) {
     const [noVistos, setNoVistos] = useState(registroErrores.noVistos());
     useEffect(() => registroErrores.suscribir(() => setNoVistos(registroErrores.noVistos())), []);
 
+    // Auto-actualizador (A2): comprobación al arrancar, silenciosa (si no hay red
+    // o el plugin no está, no ensucia el registro de errores). Si hay versión
+    // nueva, punto pulsante en "Configuración" (y desde ahí se instala).
+    const [actualizacion, setActualizacion] = useState<EstadoActualizacion | null>(null);
+    useEffect(() => {
+        let cancelado = false;
+        comprobarActualizacion({ silencioso: true }).then(e => {
+            if (!cancelado && e.disponible) setActualizacion(e);
+        });
+        return () => { cancelado = true; };
+    }, []);
+
     const isDark = theme === "dark";
 
     return (
@@ -126,6 +139,11 @@ export default function Sidebar({ alAbrirErrores }: SidebarProps) {
                                             <span className={`absolute left-0 top-1/2 -translate-y-1/2 w-1 h-6 rounded-r-full bg-orange transition-all duration-200 ${isActive ? "opacity-100 shadow-neon-orange" : "opacity-0"}`} />
                                             <Icon size={17} className={`shrink-0 transition-colors duration-200 ${isActive ? "text-orange" : "text-silver/40 group-hover:text-orange"}`} />
                                             <span className="truncate">{item.label}</span>
+                                            {item.path === "/configuracion" && actualizacion?.disponible && (
+                                                <span className="ml-auto w-2 h-2 rounded-full bg-success animate-pulse shadow-neon-orange"
+                                                    title={`Nueva versión ${actualizacion.version} disponible`}
+                                                />
+                                            )}
                                         </Link>
                                     </li>
                                 );

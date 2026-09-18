@@ -52,3 +52,6 @@ logs_*.txt
 # Instaladores descargados para la prueba en VM (no versionar binarios)
 .rc-artifacts/
 sandbox-prueba/
+
+# Claves de firma del auto-actualizador (la privada es el secreto más crítico)
+.claves-updater/

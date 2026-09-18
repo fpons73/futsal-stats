@@ -437,6 +437,10 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         // 4. Plugin base
         .plugin(tauri_plugin_opener::init())
+        // 5. Auto-actualizador (A2 del roadmap): comprobación de actualizaciones
+        //    contra el latest.json de Releases y reinicio tras instalarlas.
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .invoke_handler(tauri::generate_handler![
             fetch_html,
             guardar_acta_transaccion,

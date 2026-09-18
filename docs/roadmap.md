@@ -43,13 +43,24 @@ de prueba (dispatch manual) verificando la firma con `signtool verify /pa`.
 Nota 2024: EV ya no acelera la reputación de SmartScreen — Certum OSS es la
 elección salvo que surja distribución corporativa.
 
-### A2 · Auto-actualizador (`tauri-plugin-updater`)
+### A2 · Auto-actualizador — 🟡 IMPLEMENTADO, se activa con el primer release con clave (18/09/2026)
 
-Hoy el usuario no tiene forma de saber que hay versión nueva. El plugin
-oficial de Tauri da aviso + actualización con un clic.
+Mecánica completa integrada: plugins `updater` + `process` registrados,
+endpoint `latest.json` de Releases, `createUpdaterArtifacts` activo,
+`installMode: passive`, keypair minisign generado (privada gitignored),
+`latest.json` publicado por `tauri-action`, check silencioso al arrancar,
+punto pulsante en la Sidebar y card en Configuración con búsqueda manual,
+confirmación, progreso y reinicio. Degradación elegante sin Tauri/plugin
+(tests 353+). En CI la clave se inyecta solo si el secret existe; sin ella
+la release sale sin artefactos de updater (degradación verificada en el
+código del CLI).
 
-| Tarea | Notas |
-|---|---|
+**Pendiente**: dar de alta el secret `TAURI_SIGNING_PRIVATE_KEY` (contenido
+de `.claves-updater/tauri.key`, sin password) en el repo y etiquetar la
+siguiente versión — la primera actualización real llegará de la 1.0.1 a la
+1.0.2. La clave privada es el secreto más crítico tras `CERTUM_OTP_URI`.
+
+---|---|
 | Endpoint de últimas versiones | Un JSON estático en el repo (`latest.json`, vía GitHub Pages o raw) con versión, URL de descarga y nota de release. Sin backend. |
 | Firmar los artefactos de actualización | El updater exige firmas (`minisign`): `tauri signer generate` → clave privada en secret del repo, pública en el JSON. **Depende de A1** (misma disciplina de firma; los artefactos ya se generan en CI). |
 | UI de actualización | Aviso no bloqueante en la sidebar (badge "v1.1 disponible") + diálogo de instalación con reinicio de la app. |

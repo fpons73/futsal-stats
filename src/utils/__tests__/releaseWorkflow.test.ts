@@ -61,3 +61,26 @@ it("el bundler firma cada artefacto con un comando que es no-op sin certificado"
     // sobreviva a la expiración del certificado
     expect(script).toContain("/tr");
 });
+
+it("el updater se alimenta del latest.json de Releases con clave condicional", () => {
+    // Inyección de la clave solo si el secret existe...
+    expect(yaml).toContain("Preparar clave de firma del updater");
+    expect(yaml).toContain("secrets.TAURI_SIGNING_PRIVATE_KEY");
+    // ...y degradación explícita sin clave (release sin artefactos de updater)
+    expect(yaml).toContain("createUpdaterArtifacts");
+    expect(yaml).toContain("args_extra=--config");
+    // El JSON del updater se publica junto al instalador (NSIS preferente)
+    expect(yaml).toMatch(/uploadUpdaterJson:\s*true/);
+    expect(yaml).toMatch(/updaterJsonPreferNsis:\s*true/);
+});
+
+it("la config del updater: endpoint latest.json, pubkey y artefactos activados", () => {
+    const conf = readFileSync("src-tauri/tauri.conf.json", "utf8");
+    expect(conf).toContain("\"createUpdaterArtifacts\": true");
+    expect(conf).toContain("releases/latest/download/latest.json");
+    expect(conf).toContain("\"pubkey\"");
+    expect(conf).toContain("\"installMode\": \"passive\"");
+    // El servicio y el badge existen (frontend A2)
+    expect(readFileSync("src/services/updaterService.ts", "utf8")).toContain("comprobarActualizacion");
+    expect(readFileSync("src/components/Sidebar.tsx", "utf8")).toContain("updaterService");
+});

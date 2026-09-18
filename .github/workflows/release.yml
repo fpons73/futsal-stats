@@ -54,6 +54,30 @@ jobs:
         shell: powershell
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/firmar/conectar-simplysign.ps1
 
+      # --- Auto-actualizador (A2) --------------------------------------------
+      # El updater exige firmar los artefactos (minisign). Si el secret
+      # TAURI_SIGNING_PRIVATE_KEY existe, se inyecta (soporta multi-línea con
+      # heredoc) y el build genera los artefactos de actualización + latest.json.
+      # Si no existe, el build sigue siendo posible: se desactiva
+      # createUpdaterArtifacts vía --config para que el CLI no exija la clave.
+      - name: Preparar clave de firma del updater (si existe el secret)
+        shell: bash
+        env:
+          K: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          P: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          if [ -n "$K" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY<<CLAVE_EOF" >> "$GITHUB_ENV"
+            echo "$K" >> "$GITHUB_ENV"
+            echo "CLAVE_EOF" >> "$GITHUB_ENV"
+            echo "TAURI_SIGNING_PRIVATE_KEY_PASSWORD=$P" >> "$GITHUB_ENV"
+            echo "args_extra=" >> "$GITHUB_ENV"
+            echo "firma_updater=activada"
+          else
+            echo "args_extra=--config {\"bundle\":{\"createUpdaterArtifacts\":false}}" >> "$GITHUB_ENV"
+            echo "firma_updater=sin-clave (release sin artefactos de updater)"
+          fi
+
       # En push de tag usa la etiqueta tal cual; en dispatch manual la entrada
       # tag_name o, si está vacía, la versión de tauri.conf.json.
       # Las versiones con sufijo (1.0.0-rc.1, 2.0.0-beta) se marcan prerelease.
@@ -84,7 +108,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          args: --bundles nsis
+          # args_extra queda vacío cuando hay clave de updater; sin clave añade
+          # el --config que desactiva los artefactos de actualización (ver arriba).
+          args: --bundles nsis ${{ env.args_extra }}
+          uploadUpdaterJson: true
+          updaterJsonPreferNsis: true
           tagName: ${{ steps.tag.outputs.tag }}
           releaseName: "Global Futsal Stats ${{ steps.tag.outputs.tag }}"
           # Plantilla de notas orientada a USUARIO FINAL (no desarrollador):
