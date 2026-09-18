@@ -4,6 +4,7 @@ import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
 import { Escudo, Bandera } from "../components/ImagenSegura";
+import { Link } from "react-router-dom";
 import { Plus, Search, Trash2, Edit, Upload, Shield, Filter, X, AlertTriangle } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
@@ -341,7 +342,9 @@ export default function Equipos() {
                                         <Escudo ruta={equipo.escudo_path} nombre={equipo.nombre} className="w-full h-full" />
                                     </div>
                                 </td>
-                                <td className="p-4 font-bold text-white group-hover:text-orange transition-colors">{equipo.nombre}</td>
+                                <td className="p-4 font-bold">
+                                    <Link to={`/equipo/${equipo.id}`} className="text-white group-hover:text-orange transition-colors hover:underline decoration-orange/50">{equipo.nombre}</Link>
+                                </td>
                                 <td className="p-4 text-center font-display font-black text-orange text-glow-orange text-xs uppercase tracking-wider">{equipo.abreviatura}</td>
                                 <td className="p-4 text-center">
                                     {equipo.pais_id === idDesconocido ? (

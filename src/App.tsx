@@ -18,6 +18,8 @@ import Ediciones from "./pages/Ediciones";
 import Fases from "./pages/Fases";
 import Partidos from "./pages/Partidos";
 import DetallePartido from "./pages/DetallePartido";
+import FichaEquipo from "./pages/FichaEquipo";
+import FichaJugador from "./pages/FichaJugador";
 import Equipos from "./pages/Equipos";
 import InscripcionEquipos from "./pages/InscripcionEquipos";
 import Plantillas from "./pages/Plantillas";
@@ -172,6 +174,10 @@ function App() {
                   {/* Partidos */}
                   <Route path="/partidos" element={<Partidos />} />
                   <Route path="/partido/:id" element={<DetallePartido />} />
+
+                  {/* Fichas enriquecidas (B1 del roadmap) */}
+                  <Route path="/equipo/:id" element={<FichaEquipo />} />
+                  <Route path="/jugador/:id" element={<FichaJugador />} />
 
                   {/* Equipos y Personas */}
                   <Route path="/equipos" element={<Equipos />} />

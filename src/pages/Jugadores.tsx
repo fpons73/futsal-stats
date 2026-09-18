@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
+import { Link } from "react-router-dom";
 import { Plus, Search, Trash2, Edit, Eye, Filter, User, Upload, X, Calendar, AlertTriangle } from "lucide-react";
 import { toast } from "../components/Toast";
 import { EstadoVacio } from "../components/EstadoVacio";
@@ -382,7 +383,7 @@ export default function Jugadores() {
                                         </div>
                                     </td>
                                     <td className="p-4">
-                                        <div className="font-bold text-white group-hover:text-orange transition-colors">{j.nombre_deportivo}</div>
+                                        <Link to={`/jugador/${j.id}`} className="font-bold text-white group-hover:text-orange transition-colors hover:underline decoration-orange/50">{j.nombre_deportivo}</Link>
                                         <div className="text-xs text-silver/40 font-medium">{j.nombre} {j.apellidos}</div>
                                     </td>
                                     <td className="p-4 text-center">

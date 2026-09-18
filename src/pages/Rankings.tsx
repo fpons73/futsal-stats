@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { BarChart3, Trophy, Shield, User, Filter } from "lucide-react";
 import { getImgSrc } from "../utils/imageHelpers";
 import { calcularClasificacion, obtenerEstadisticasJugadores, obtenerEstadisticasEquipos, obtenerCincoIdeal } from "../utils/calculadoraLiga";
@@ -104,7 +105,7 @@ export default function Rankings() {
                     <td className="py-2 px-3">
                       <div className="flex items-center gap-2">
                         {c.escudo && <img src={getImgSrc(c.escudo)} className="w-5 h-5 object-contain" />}
-                        <span className="text-white font-medium">{c.nombre}</span>
+                        <Link to={`/equipo/${c.equipo_id}`} className="text-white font-medium hover:text-orange transition-colors hover:underline decoration-orange/50">{c.nombre}</Link>
                       </div>
                     </td>
                     <td className="text-center py-2 px-2 text-gray-300">{c.pj}</td>
