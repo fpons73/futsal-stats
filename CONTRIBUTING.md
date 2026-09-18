@@ -29,10 +29,14 @@ Convenciones del proyecto:
 
 ## Proceso de release
 
-El canal de distribución para la 1.0 es **descarga manual desde GitHub
-Releases**: el instalador se compila en CI y se publica como borrador para
-revisión. No hay auto-actualizador (`tauri-plugin-updater`) — es la decisión
-documentada del hito; si algún día se añade, actualizar esta sección.
+El canal de distribución es **descarga manual desde GitHub Releases**: el
+instalador se compila en CI y se publica como borrador para revisión.
+
+El auto-actualizador (roadmap A2) está integrado: cuando el secret
+`TAURI_SIGNING_PRIVATE_KEY` esté configurado, cada release genera además el
+`latest.json` firmado y las instalaciones 1.0.1+ se actualizarán solas. Sin el
+secret, la release sale solo con el instalador (comportamiento actual) y sin
+artefactos de updater.
 
 ### Pasos
 
@@ -50,8 +54,8 @@ documentada del hito; si algún día se añade, actualizar esta sección.
    ```
 
 3. **CI compila el instalador**: el workflow `release.yml` (disparado por el tag
-   `v*`) compila NSIS + MSI en `windows-latest` con `tauri-action` y crea un
-   **Release borrador** con los artefactos adjuntos.
+   `v*`) compila el instalador NSIS en `windows-latest` con `tauri-action` y
+   crea un **Release borrador** con los artefactos adjuntos.
 
 4. **Revisa y publica** desde <https://github.com/fpons73/futsal-stats/releases>:
    abre el borrador, edita las notas si hace falta y pulsa *Publish*. Los
