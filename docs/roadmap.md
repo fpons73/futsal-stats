@@ -94,6 +94,24 @@ app es una enciclopedia consultable pero aún no explota los datos.
 **Criterio de salida**: desde un equipo, ver su clasificación y sus
 jugadores sin escribir SQL a mano; rankings de la temporada en un clic.
 
+**Estado: HECHO (núcleo, `e2d3e85`)** — clasificación de liga expuesta en
+Rankings (existente) y dentro de la ficha de equipo; fichas enriquecidas
+`/equipo/:id` (resultados con forma y enlace al acta, posición en la
+clasificación reutilizando `calculadoraLiga`, plantilla activa por
+Afiliacion) y `/jugador/:id` (trayectoria histórica, acumulado de la edición
+sobre EstadisticaPartidoJugador, comparativa por barras de los últimos
+partidos); nombres de las tablas de Equipos, Jugadores y Rankings enlazados
+a sus fichas. 381 tests en verde. El criterio de salida se cumple.
+
+**B1.x — pulido posterior (sin fecha)**:
+
+- Historial de temporadas del equipo: tabla por edición con posición final
+  (hoy la ficha muestra solo la edición activa y los últimos 10 partidos).
+- Comparativa entre temporadas en la ficha de jugador (goles/minutos por
+  edición, no solo la activa).
+- Rankings avanzados por fase/grupo en la clasificación (la calculadora ya
+  acepta `faseId`; falta la UI para elegirlos).
+
 ### B2 · Vivir el partido (pizarra → seguimiento en vivo)
 
 La pizarra táctica ya funciona; convertirla en herramienta de banquillo.
@@ -128,6 +146,10 @@ reportes sin tocar la Enciclopedia.
 | Modo compacto/denso | Tablas con más filas visibles (para 20k jugadores la densidad importa). |
 | Columnas configurables | Mostrar/ocultar/reordenar columnas en las tablas grandes, persistido en Preferencias. |
 | Búsqueda global | Ctrl+K que busque a la vez en equipos, jugadores, entrenadores, partidos. |
+
+**Estado: HECHO en lo principal (`0d2d688`)** — búsqueda global Ctrl+K con
+paleta, índice acento-insensible y navegación al resultado. Quedan de este
+bloque: atajos tipo `g p`, modo denso y columnas configurables.
 
 ---
 
