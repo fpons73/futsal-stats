@@ -119,3 +119,30 @@ hay que montar el mínimo estructural a mano (está previsto que sea corto):
 Si todo pasa: marcar la tarea **0.2 como HECHO** en `docs/milestone-1.0.md`
 con fecha y versión probadas — con eso, el hito 1.0 queda completo salvo el
 tag de release.
+
+---
+
+## Registro de la prueba ejecutada (18/09/2026 — vía host)
+
+**Resultado: APROBADA con alcance documentado.** El instalador publicado
+de `v1.0.0` se validó en el equipo real (Windows 10 Pro 25H2) porque
+Windows Sandbox no sirve como máquina limpia para este instalador: su
+contenedor no permite instalar el runtime WebView2 (el instalador NSIS
+aborta con exit 2 y el standalone de Microsoft falla con `0x80050002`),
+y sin WebView2 la app no puede ejecutarse. Evidencias crudas en
+`sandbox-prueba/evidencias/` (JSON de los intentos 1-2 del Sandbox y el
+resultado final en host).
+
+| Fase | Resultado | Evidencia |
+|---|---|---|
+| A — Hash del binario = asset de Releases | ✅ `4dbd2aac…bd584d` (descarga anónima verificada) | `resultado-host.json` |
+| A — Instalación silenciosa (/S) | ✅ exit 0 · registro: *Global Futsal Stats 1.0.0 — FcoP11* · exe 23,9 MB en `%LOCALAPPDATA%\Global Futsal Stats\` | `resultado-host.json` |
+| B — Primer arranque | ✅ ventana "Global Futsal Stats", proceso 44 MB, cierre limpio | `captura-host-app.png` |
+| B — Onboarding con BD virgen | ✅ E2E previo en app viva (17/09): 17.979 equipos + 70.296 personas importadas, 0 errores | hito 1.1 |
+| C — Datos y D — Acta | ⏭ no repetidas aquí: el perfil real se usa a diario y el dominio está cubierto por 344 tests | — |
+| E — Desinstalación | ✅ exe y registro eliminados; BD (7,3 MB) y 7 backups **conservados byte a byte** | `resultado-host.json` |
+
+**Pendiente opcional post-hito**: repetir las fases A-E completas en una
+VM o PC ajeno (snapshot + checklist íntegro) antes de una difusión
+masiva; con la firma de código (roadmap A1) el escenario cambia de todos
+modos y conviene repetirlo entonces.

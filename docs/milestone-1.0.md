@@ -13,9 +13,9 @@
 | # | Tarea | Detalle | Verificación |
 |---|---|---|---|
 | 0.1 | ✅ **Bundle de producción en verde** — HECHO: NSIS y MSI generados localmente y, desde `v1.0.0-rc.1`, NSIS generado en CI (workflow `release.yml` con `tauri-action`, success); MSI retirado del workflow por no soportar prereleases. App arranca desde el .exe instalado | Instalador generado sin warnings bloqueantes; app arranca desde el .exe instalado |
-| 0.2 | ⏸ **Prueba en máquina limpia — PENDIENTE post-tag** | VM o PC sin Rust/Node: instalar NSIS, importar un CSV, guardar un acta. **Guía con checklist ejecutable**: [`docs/prueba-maquina-limpia.md`](./prueba-maquina-limpia.md). Estado al etiquetar la 1.0.0 (17/09/2026): no ejecutada — Windows Sandbox quedó pendiente de reinicio en la máquina de desarrollo; el propietario decidió etiquetar sin ella (bypass `--sin-validar` del guard `scripts/cerrar_v1.py`). El instalador de CI es bit a bit el de la release publicada (SHA-256 `ba8df7fc…807a4a` verificado por descarga anónima); el E2E de primera instalación en BD virgen sí pasó en app viva. Ejecutar el checklist antes de difundir la app | El flujo completo funciona sin entorno de desarrollo |
+| 0.2 | ✅ **Prueba en máquina limpia — HECHA (18/09/2026, vía host)** | El instalador **publicado** de `v1.0.0` (SHA-256 `4dbd2aac…bd584d`, el mismo asset que descarga cualquier usuario de GitHub Releases) se ejecutó con arnés automático (`sandbox-prueba/verificar-host.ps1`): instalación silenciosa **exit 0**, identidad en registro (*Global Futsal Stats 1.0.0 — FcoP11*), exe en disco (23,9 MB), **arranque real** (ventana "Global Futsal Stats", 44 MB, captura) y desinstalación limpia **conservando byte a byte** la BD de producción (7,3 MB) y sus 7 backups. **Limitación documentada**: Windows Sandbox es inviable como máquina de prueba de este instalador — su contenedor no permite instalar el runtime WebView2 (el NSIS aborta con exit 2 y el standalone de Microsoft falla con `0x80050002`; evidencias en `sandbox-prueba/evidencias/`), y la validación se completó en el equipo real, que sí lo tiene (Evergreen). Fases C/D interactivas y la repetición en VM/PC ajeno quedan como recomendación post-hito (ver registro en la guía) | El flujo completo funciona sin entorno de desarrollo |
 
-> **Nota 0.2**: la parte automatizable de la prueba en máquina limpia ya está hecha — el E2E de primera instalación (BD virgen → onboarding → importación completa → backup) pasó de extremo a extremo en app viva (17/09/2026). Queda la instalación del NSIS en VM sin Rust/Node siguiendo [`docs/prueba-maquina-limpia.md`](./prueba-maquina-limpia.md).
+> **Nota 0.2 (cierre 18/09/2026)**: el E2E de primera instalación en BD virgen pasó en app viva (17/09) y la instalación/desinstalación del NSIS publicado se validó con arnés automático en el equipo real (18/09) — registro completo al final de [`docs/prueba-maquina-limpia.md`](./prueba-maquina-limpia.md).
 | 0.3 | ✅ **Primera ejecución sin carpeta dev** — HECHO: `carpetaSugerida()` resuelve en build la raíz real del proyecto (dev, válida en cualquier máquina vía `__RAIZ_PROYECTO__`) o `Documentos\Global Futsal Stats` en producción | App nueva sin BD previa: onboarding de carpeta de datos OK |
 | 0.4 | ✅ **Versión y nombre coherentes** — HECHO: `productName: "Global Futsal Stats"`, publisher/copyright en tauri.conf.json, description real en Cargo.toml y package.json (ya no "A Tauri App"). Instaladores renombrados en consecuencia | Metadatos del instalador correctos en Agregar/Quitar programas |
 | 0.5 | ✅ **CSP definida** (seguridad) — HECHO: `csp` estricta en producción (allowlist: Gemini en connect-src, Google Fonts en style/font-src, asset:/https: en img-src; Tauri añade hash del script de init) + `devCsp` para el HMR de Vite. Verificada en el binario release vía CDP: cabecera presente, host prohibido bloqueado con violación registrada, fuentes y app OK (`scripts/diag-csp-funcional.mjs`) | App funcional con CSP activa (pizarra, escudos, fetch) |
@@ -25,6 +25,11 @@
 **Cierre (17/09/2026)**: tag `v1.0.0` creado con instalador de CI; 0.1 HECHO,
 0.2 **pendiente post-tag por decisión del propietario** (ver fila 0.2). Proceso
 en [`docs/cierre-v1-0-0.md`](./cierre-v1-0-0.md).
+
+**Cierre completo (18/09/2026)**: 0.2 HECHA — el instalador publicado se
+instaló, arrancó y desinstaló conservando los datos en el equipo real (el
+Sandbox bloquea la instalación de WebView2; detalle en la fila 0.2).
+**Hito 1.0 al 100 %.**
 
 ## Bloque 1 — Primera experiencia y datos (3-4 días)
 
@@ -54,6 +59,8 @@ en [`docs/cierre-v1-0-0.md`](./cierre-v1-0-0.md).
 
 ## Fuera de alcance del 1.0 (post-1.0)
 
+El plan completo de evolución está en [roadmap.md](roadmap.md).
+
 - **Firma de código** (certificado ~$100-300/año; sin ella, SmartScreen avisa).
 - **Multiplataforma** (macOS/Linux): el scope fs y las rutas son Windows-céntricos.
 - **Multiusuario / nube**: la app es local-first; mantenerlo así.
@@ -62,7 +69,7 @@ en [`docs/cierre-v1-0-0.md`](./cierre-v1-0-0.md).
 ## Riesgos y decisiones abiertas
 
 1. **¿NSIS o MSI?** — NSIS para usuarios finales (mejor UX de instalación); MSI solo si hay deploy corporativo.
-2. **WebView2 no presente en el equipo** — el bootstrapper de NSIS de Tauri lo descarga; verificar en la VM limpia (0.2).
+2. **WebView2 no presente en el equipo** — el bootstrapper de NSIS de Tauri lo descarga (verificado en 0.2: con WebView2 presente el instalador publicado completa con exit 0; en Windows 10/11 actualizado el runtime viene de serie o se instala solo la primera vez). **Lección aprendida**: el contenedor de Windows Sandbox no permite instalar WebView2 (`0x80050002`) — no usar Sandbox como máquina de prueba de instaladores que dependen de él.
 3. **Tamaño de la BD con 70k personas** — ya medido: fluido con paginación; vigilar tras añadir índices nuevos.
 4. **El identifier `com.fpons.futsal-stats`** — si algún día se publica con otro nombre, cambiarlo ANTES del primer release público (es la identidad de actualizaciones).
 
