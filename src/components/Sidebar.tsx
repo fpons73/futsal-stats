@@ -3,7 +3,7 @@ import {
     LayoutDashboard, Globe, Flag, Trophy, Users, Shirt, Calendar,
     Settings, Layers, ListOrdered, UserCog, Gavel, MapPin,
     UserPlus, UserCheck, CalendarDays, BarChart3, Sun, Moon,
-    Download, Star, Shield, AlertOctagon
+    Download, Star, Shield, AlertOctagon, Search
 } from "lucide-react";
 import { registroErrores } from "../utils/registroErrores";
 import { useEffect, useState } from "react";
@@ -58,9 +58,11 @@ const secciones: { titulo: string; items: { icon: typeof LayoutDashboard; label:
 interface SidebarProps {
     /** Abre el panel del registro de errores (tarea 2.3). */
     alAbrirErrores?: () => void;
+    /** Abre la paleta de búsqueda global Ctrl+K (B4 del roadmap). */
+    alAbrirBuscador?: () => void;
 }
 
-export default function Sidebar({ alAbrirErrores }: SidebarProps) {
+export default function Sidebar({ alAbrirErrores, alAbrirBuscador }: SidebarProps) {
     const location = useLocation();
     const { theme, toggleTheme } = useTheme();
     const { edicionActiva, setEdicionActiva, ediciones } = useEdicion();
@@ -116,6 +118,19 @@ export default function Sidebar({ alAbrirErrores }: SidebarProps) {
                     </select>
                 </div>
             )}
+
+            {/* BÚSQUEDA GLOBAL (B4): Ctrl+K o clic */}
+            <div className="px-3 pt-3 shrink-0">
+                <button
+                    onClick={alAbrirBuscador}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] font-semibold text-silver/50 bg-white/[0.03] border border-white/10 hover:bg-white/5 hover:text-white hover:border-white/20 transition-all group"
+                    title="Búsqueda global (Ctrl+K)"
+                >
+                    <Search size={15} className="text-silver/40 group-hover:text-orange transition-colors" />
+                    <span className="flex-1 text-left">Buscar…</span>
+                    <kbd className="px-1.5 py-0.5 rounded bg-white/10 border border-white/10 text-[10px] font-bold text-silver/40">Ctrl K</kbd>
+                </button>
+            </div>
 
             {/* NAVEGACIÓN AGRUPADA */}
             <nav className="flex-1 overflow-y-auto py-3 px-3 space-y-4">

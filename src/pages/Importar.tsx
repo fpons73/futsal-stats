@@ -5,6 +5,7 @@ import { toast } from "../components/Toast";
 import { useEdicion } from "../context/EdicionContext";
 import { importarCalendarioCSV, importarCalendarioTexto } from "../utils/importadorCalendario";
 import { importarEquiposCSV, importarJugadoresCSV, importarEntrenadoresCSV, importarCompeticionesCSV, ULTIMOS_INFORMES } from "../utils/importadorMasivo";
+import { invalidarIndiceBusqueda } from "../services/buscadorService";
 import { exportarInforme, informeTieneProblemas, InformeImportacion } from "../utils/informeImportacion";
 import { generarRoundRobin, asignarPabellones, asignarFechas } from "../utils/generadorCalendario";
 import { seedConfederacionesFutsal } from "../utils/seedConfederaciones";
@@ -59,11 +60,11 @@ export default function Importar() {
     } finally { setCargando(false); }
   };
 
-  const handleImportarEquipos = () => ejecutarConInforme("equipos", () => importarEquiposCSV());
+  const handleImportarEquipos = () => ejecutarConInforme("equipos", () => importarEquiposCSV().then(r => { invalidarIndiceBusqueda(); return r; }));
 
-  const handleImportarJugadores = () => ejecutarConInforme("jugadores", () => importarJugadoresCSV());
+  const handleImportarJugadores = () => ejecutarConInforme("jugadores", () => importarJugadoresCSV().then(r => { invalidarIndiceBusqueda(); return r; }));
 
-  const handleImportarEntrenadores = () => ejecutarConInforme("entrenadores", () => importarEntrenadoresCSV());
+  const handleImportarEntrenadores = () => ejecutarConInforme("entrenadores", () => importarEntrenadoresCSV().then(r => { invalidarIndiceBusqueda(); return r; }));
 
   const handleImportarCompeticiones = () => ejecutarConInforme("competiciones", () => importarCompeticionesCSV());
 

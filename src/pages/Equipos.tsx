@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import Database from "@tauri-apps/plugin-sql";
 import { open } from "@tauri-apps/plugin-dialog";
 import { convertFileSrc } from "@tauri-apps/api/core";
@@ -36,13 +37,15 @@ interface Pais {
 }
 
 export default function Equipos() {
+    // Seed de búsqueda desde la paleta global (B4): /equipos?q=Nombre precarga el filtro.
+    const [searchParams] = useSearchParams();
     const [equipos, setEquipos] = useState<Equipo[]>([]);
     const [paises, setPaises] = useState<Pais[]>([]);
 
     // Filtros. La búsqueda va debounced (200 ms): el índice de ~18k equipos solo
     // se reevalúa cuando el usuario deja de teclear, no en cada pulsación.
-    const [busquedaInput, setBusquedaInput] = useState("");
-    const [busqueda, setBusqueda] = useState("");
+    const [busquedaInput, setBusquedaInput] = useState(() => searchParams.get("q") ?? "");
+    const [busqueda, setBusqueda] = useState(() => searchParams.get("q") ?? "");
     useEffect(() => {
         const t = setTimeout(() => setBusqueda(busquedaInput), 200);
         return () => clearTimeout(t);

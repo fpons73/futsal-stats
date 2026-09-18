@@ -9,6 +9,7 @@ import { iniciarBaseDeDatos, esBaseVacia, getPreferencia } from "./db";
 import { aplicarCarpetaDatosAlArranque } from "./utils/carpetaDatos";
 import Sidebar from "./components/Sidebar";
 import PanelErrores from "./components/PanelErrores";
+import BuscadorGlobal from "./components/BuscadorGlobal";
 import { ToastContainer } from "./components/Toast";
 import Dashboard from "./pages/Dashboard";
 import Competiciones from "./pages/Competiciones";
@@ -41,6 +42,8 @@ function App() {
   const [recuperacion, setRecuperacion] = useState(false);
   // Registro global de errores (tarea 2.3): panel deslizante desde la sidebar.
   const [panelErrores, setPanelErrores] = useState(false);
+  // Búsqueda global (B4 del roadmap): paleta Ctrl+K.
+  const [buscadorAbierto, setBuscadorAbierto] = useState(false);
 
   useEffect(() => {
     iniciarBaseDeDatos()
@@ -149,7 +152,7 @@ function App() {
         <EdicionProvider>
           <Router>
             <div className="flex min-h-screen bg-transparent text-white font-sans">
-              <Sidebar alAbrirErrores={() => setPanelErrores(true)} />
+              <Sidebar alAbrirErrores={() => setPanelErrores(true)} alAbrirBuscador={() => setBuscadorAbierto(true)} />
               <main className="flex-1 ml-64 p-0 overflow-auto">
                 <Routes>
                   <Route path="/" element={<Dashboard />} />
@@ -186,6 +189,12 @@ function App() {
                 </Routes>
               </main>
               <PanelErrores abierto={panelErrores} onCerrar={() => setPanelErrores(false)} />
+              {/* Búsqueda global (B4): Ctrl+K — el atajo lo registra el propio componente. */}
+              <BuscadorGlobal
+                  abierto={buscadorAbierto}
+                  alAbrir={() => setBuscadorAbierto(true)}
+                  alCerrar={() => setBuscadorAbierto(false)}
+              />
               <ToastContainer />
             </div>
           </Router>
