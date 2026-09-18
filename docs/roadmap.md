@@ -27,25 +27,21 @@ desinstalación conservando BD y backups byte a byte. Detalle en el hito
 en VM/PC ajeno antes de difusión masiva (natural hacerlo junto a A1,
 cuando el binario ya vaya firmado).
 
-### A1 · Firma de código
+### A1 · Firma de código — 🟡 INTEGRACIÓN HECHA, certificado pendiente (18/09/2026)
 
-El aviso de SmartScreen es la primera fricción real de todo usuario
-nuevo (*Más información → Ejecutar de todas formas*). Firmar lo elimina.
+La mecánica completa está integrada y es segura por diseño: `release.yml`
+conecta la tarjeta cloud de Certum (SimplySign) **solo si existen los
+secrets** (`CERTUM_OTP_URI`, `CERTUM_USERNAME`, `CERTUM_KEY_ID`) y firma cada
+artefacto vía `bundle.windows.signCommand` → `scripts/firmar/signar.ps1`
+(signtool sha256 + sello de tiempo RFC 3161 de Certum). Sin secrets, la
+release se genera sin firmar exactamente como hasta ahora. Proceso de
+contratación y custodia de secrets documentado en `CONTRIBUTING.md`.
 
-| Tarea | Notas |
-|---|---|
-| Elegir tipo de certificado | **OV** (~100-300 €/año, reputación gradual de SmartScreen) frente a **EV** (~300-500 €/año, sin aviso desde el primer binario, requiere hardware/HSM o proveedor cloud). Para un proyecto gratuito, OV es suficiente: el aviso desaparece tras acumular reputación de descargas. |
-| Proveedor | Certum (Open Source Developer, ~25-70 €/año para OSS, la opción más barata si el repo es público) o SSL.com/Sectigo (OV estándar). El ID de Microsoft Partner (App) también suma reputación gratuita. |
-| Integrar la firma en `release.yml` | Firmar el `.exe` instalador **y** el `.exe` de la app dentro del bundle (`signtool sign /fd sha256 /tr <timestamp> /td sha256`). Secret `CERT_PASSWORD` + certificado PFX como secret cifrado del repo. |
-| Documentar en `CONTRIBUTING.md` | Reemplazar la sección "Firma de código (post-1.0)" por el proceso real paso a paso. |
-
-**Criterio de salida**: el instalador descargado de Releases no muestra
-SmartScreen (o lo muestra solo durante el periodo de reputación inicial),
-y `release.yml` firma automáticamente en cada tag.
-
-**Decisión abierta**: Certum OSS (barato, requiere validar identidad una
-vez) frente a OV estándar. Empezar por Certum si el coste importa; EV
-solo si se busca distribución corporativa.
+**Pendiente (decisión de compra, no de código)**: contratar el certificado
+Certum OSS (~25-70 €/año), dar de alta los tres secrets y lanzar una release
+de prueba (dispatch manual) verificando la firma con `signtool verify /pa`.
+Nota 2024: EV ya no acelera la reputación de SmartScreen — Certum OSS es la
+elección salvo que surja distribución corporativa.
 
 ### A2 · Auto-actualizador (`tauri-plugin-updater`)
 

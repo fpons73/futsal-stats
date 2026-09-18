@@ -39,3 +39,25 @@ it("usa la misma versión de Node y cache npm que la CI principal", () => {
     expect(yaml).toMatch(/node-version:\s*22/);
     expect(yaml).toContain("cache: npm");
 });
+
+it("la firma de código es condicional: solo actúa con los secrets de Certum", () => {
+    // Paso de conexión presente y omitido sin secrets (no bloquea releases sin certificado)
+    expect(yaml).toContain("Conectar tarjeta cloud de Certum");
+    expect(yaml).toContain("if: ${{ env.CERTUM_OTP_URI != '' && env.CERTUM_USERNAME != '' && env.CERTUM_KEY_ID != '' }}");
+    // Los tres secrets llegan al job como variables de entorno
+    for (const s of ["CERTUM_OTP_URI", "CERTUM_USERNAME", "CERTUM_KEY_ID"]) {
+        expect(yaml).toContain(`secrets.${s}`);
+    }
+});
+
+it("el bundler firma cada artefacto con un comando que es no-op sin certificado", () => {
+    const conf = readFileSync("src-tauri/tauri.conf.json", "utf8");
+    expect(conf).toContain('"signCommand"');
+    expect(conf).toContain("scripts/firmar/signar.ps1");
+    const script = readFileSync("scripts/firmar/signar.ps1", "utf8");
+    // Sin CERTUM_KEY_ID termina 0: no rompe builds locales ni CI sin certificado
+    expect(script).toContain("exit 0");
+    // Cuando sí firma: sello de tiempo RFC 3161 (/tr) para que la firma
+    // sobreviva a la expiración del certificado
+    expect(script).toContain("/tr");
+});

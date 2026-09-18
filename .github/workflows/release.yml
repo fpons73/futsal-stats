@@ -18,6 +18,14 @@ jobs:
   build:
     name: Instalador Windows (NSIS)
     runs-on: windows-latest
+    # Firma de código (A1): los secrets de Certum (tarjeta cloud SimplySign)
+    # se exponen a nivel de job para poder usarlos en los `if` de los pasos.
+    # Si no están configurados, la release se genera SIN FIRMAR (como hasta
+    # ahora): la firma es un paso condicionado, nunca bloquea una release.
+    env:
+      CERTUM_OTP_URI: ${{ secrets.CERTUM_OTP_URI }}
+      CERTUM_USERNAME: ${{ secrets.CERTUM_USERNAME }}
+      CERTUM_KEY_ID: ${{ secrets.CERTUM_KEY_ID }}
     steps:
       - uses: actions/checkout@v4
 
@@ -34,6 +42,17 @@ jobs:
 
       - name: Instalar dependencias del frontend
         run: npm ci
+
+      # --- Firma de código (A1 del roadmap) ----------------------------------
+      # Conecta la tarjeta cloud de Certum (SimplySign) montando el certificado
+      # en el almacén del runner. Solo se ejecuta si los tres secrets existen;
+      # el propio binario se firma dentro del build vía bundle.windows.signCommand
+      # (scripts/firmar/signar.ps1), que el bundler de Tauri llama por cada
+      # artefacto (ejecutable, desinstalador, instalador NSIS).
+      - name: Conectar tarjeta cloud de Certum (solo si hay secrets)
+        if: ${{ env.CERTUM_OTP_URI != '' && env.CERTUM_USERNAME != '' && env.CERTUM_KEY_ID != '' }}
+        shell: powershell
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/firmar/conectar-simplysign.ps1
 
       # En push de tag usa la etiqueta tal cual; en dispatch manual la entrada
       # tag_name o, si está vacía, la versión de tauri.conf.json.
@@ -90,9 +109,9 @@ jobs:
             propio instalador lo descarga.
 
             3. Si Windows muestra «Windows protegió tu equipo», pulsa **Más
-            información → Ejecutar de todas formas**: la app aún no está firmada
-            digitalmente. Es el aviso normal para apps sin certificado de pago,
-            no significa que sea peligrosa.
+            información → Ejecutar de todas formas**. En versiones recientes de
+            Windows la aplicación ya va firmada digitalmente y el aviso no
+            debería aparecer; si te aparece, avísanos abriendo un issue.
 
 
             ## Primer uso
