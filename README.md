@@ -4,10 +4,14 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![Tauri](https://img.shields.io/badge/Tauri-2-24C8D8?logo=tauri&logoColor=white)](https://v2.tauri.app/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Release](https://img.shields.io/github/v/release/fpons73/futsal-stats?sort=semver&display_name=tag&label=versi%C3%B3n)](https://github.com/fpons73/futsal-stats/releases/latest)
 
 **Global Futsal Stats** — aplicación de escritorio (Windows) para gestionar y analizar
 estadísticas de fútbol sala: competiciones, ediciones, equipos, jugadores, entrenadores,
 árbitros, partidos con acta completa y rankings.
+
+**[⬇️ Descargar Global Futsal Stats](https://github.com/fpons73/futsal-stats/releases/latest)** —
+instalador para Windows 10/11 de 64 bits (~11 MB).
 
 ## Características
 
@@ -216,6 +220,9 @@ documentados en el [README de scripts](./scripts/README.md): cómo lanzar la app
 puerto de depuración, las dos rutas de importación (diálogo nativo vs. ruta predefinida)
 y las verificaciones página a página. Para validar el instalador en una VM limpia
 (sin Rust/Node), sigue la [guía de prueba en máquina limpia](./docs/prueba-maquina-limpia.md).
+
+El plan de evolución posterior a la 1.0 está recogido en el [Roadmap post-1.0](docs/roadmap.md):
+firma de código, auto-actualizador y nuevas funcionalidades.
 
 ## Licencia
 
