@@ -66,7 +66,7 @@ describe("buscadorService", () => {
         expect(await buscarGlobal("R")).toEqual([]);
         const r = await buscarGlobal("Rafa");
         expect(r).toHaveLength(1);
-        expect(r[0]).toMatchObject({ tipo: "persona", id: 1, titulo: "Rafa" });
+        expect(r[0]).toMatchObject({ tipo: "persona", id: 1, titulo: "Rafa", ruta: "/jugador/1" });
     });
 
     it("es acento-insensible: 'Garcia' encuentra 'García'", async () => {
@@ -99,12 +99,14 @@ describe("buscadorService", () => {
         expect(soloEquipos.map((x) => x.titulo)).toContain("FC Barcelona");
     });
 
-    it("deriva la ruta de entrenadores para roles solo-Entrenador y jugadores en el resto", async () => {
+    it("personas y equipos navegan a sus fichas directas (B1)", async () => {
         configurarDb();
         const ana = (await buscarGlobal("lopez")).find((x) => x.id === 2)!;
-        expect(ana.ruta).toContain("/entrenadores?q=");
+        expect(ana.ruta).toBe("/jugador/2");
         const kike = (await buscarGlobal("kike")).find((x) => x.id === 3)!;
-        expect(kike.ruta).toContain("/jugadores?q=");
+        expect(kike.ruta).toBe("/jugador/3");
+        const equipo = (await buscarGlobal("barcelona", ["equipo"]))[0]!;
+        expect(equipo.ruta).toBe("/equipo/11");
     });
 
     it("construye subtítulo de persona desde roles cuando no hay posición", async () => {

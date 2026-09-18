@@ -27,13 +27,6 @@ export interface ResultadoBusqueda {
 /** Tipos a incluir; vacío o undefined = los tres. */
 export type FiltroTipos = Array<ResultadoBusqueda["tipo"]>;
 
-const MIN_CARACTERES = 2;
-const LIMITE_TOTAL = 20;
-/** Edad máxima del índice: pasado este tiempo se reconstruye al usarlo, así
- *  las ediciones e importaciones recientes aparecen sin tocar cada punto de
- *  mutación. La construcción son 3 SELECT y tarda centenas de ms como mucho. */
-const TTL_MS = 30_000;
-
 export interface EntradaIndice {
     tipo: ResultadoBusqueda["tipo"];
     id: number;
@@ -47,12 +40,12 @@ let cache: EntradaIndice[] | null = null;
 let construidoEn = 0;
 let cargando: Promise<EntradaIndice[]> | null = null;
 
-/** Ruta de destino para una persona según sus roles canónicos. */
-function rutaDePersona(nombre: string, roles: string): string {
-    const r = roles || "";
-    if (r.includes("Entrenador") && !r.includes("Jugador")) return `/entrenadores?q=${encodeURIComponent(nombre)}`;
-    return `/jugadores?q=${encodeURIComponent(nombre)}`;
-}
+const MIN_CARACTERES = 2;
+const LIMITE_TOTAL = 20;
+/** Edad máxima del índice: pasado este tiempo se reconstruye al usarlo, así
+ *  las ediciones e importaciones recientes aparecen sin tocar cada punto de
+ *  mutación. La construcción son 3 SELECT y tarda centenas de ms como mucho. */
+const TTL_MS = 30_000;
 
 /** Invalida el índice: tras importaciones masivas o cambios de nombres. */
 export function invalidarIndiceBusqueda(): void {
@@ -97,7 +90,7 @@ async function construirIndice(): Promise<EntradaIndice[]> {
             id: e.id,
             titulo: e.nombre,
             subtitulo: e.categoria || "",
-            ruta: `/equipos?q=${encodeURIComponent(e.nombre)}`,
+            ruta: `/equipo/${e.id}`,
             fuente: e.nombre,
         });
     }
@@ -109,7 +102,9 @@ async function construirIndice(): Promise<EntradaIndice[]> {
             id: p.id,
             titulo,
             subtitulo: p.posicion_principal || (p.roles || "").split(",").map(s => s.trim().replace(/[[\]"]/g, "")).join(", "),
-            ruta: rutaDePersona(titulo, p.roles || ""),
+            // Ficha directa (B1): vale para jugadores y entrenadores (la ficha
+            // muestra trayectoria y estadísticas de la edición activa).
+            ruta: `/jugador/${p.id}`,
             fuente: `${p.nombre_deportivo || ""} ${p.nombre || ""} ${p.apellidos || ""}`.trim(),
         });
     }
