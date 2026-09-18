@@ -101,6 +101,51 @@ se filtrara, cualquiera podría firmar binarios como tú. Guárdalo también en
 tu gestor de contraseñas y rótalo desde el panel de Certum si hay sospecha.
 Los secrets no se imprimen en los logs (GitHub los ofusca).
 
+**Checklist de activación (el día que llegue el certificado)**:
+
+*Fase 1 — Alta en Certum (su web, una sola vez)*
+
+- [ ] Activar la tarjeta cloud y abrir SimplySign Desktop.
+- [ ] Guardar el URI `otpauth://` del QR de alta (captura + gestor de contraseñas).
+- [ ] Anotar el **thumbprint SHA1** del certificado de firma de código
+      (certmgr.msc → `Cert:\CurrentUser\My` una vez montada la tarjeta).
+
+*Fase 2 — Secrets del repo (Settings → Secrets and variables → Actions)*
+
+- [ ] `CERTUM_OTP_URI` = URI `otpauth://` completo del QR.
+- [ ] `CERTUM_USERNAME` = email de la cuenta SimplySign.
+- [ ] `CERTUM_KEY_ID` = thumbprint SHA1 del certificado.
+- [ ] `TAURI_SIGNING_PRIVATE_KEY` = contenido íntegro de
+      `.claves-updater/tauri.key` (fichero gitignored; sin password la clave
+      se generó sin contraseña, así que `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+      no hace falta). Fuga de esta clave = actualizaciones suplantables.
+
+*Fase 3 — Verificación con la primera release firmada*
+
+- [ ] Disparar *Actions → Release → Run workflow* (o etiquetar la siguiente
+      versión) y comprobar en el log que el paso «Conectar tarjeta cloud de
+      Certum» corre y que `signar.ps1` firma (ya no aparece
+      «CERTUM_KEY_ID no definido»).
+- [ ] Descargar el instalador del borrador y verificar la firma:
+      `Get-AuthenticodeSignature .\Global.Futsal.Stats_X.Y.Z_x64-setup.exe`
+      debe dar `Valid` (o `signtool verify /pa /all <exe>`).
+- [ ] Comprobar que el release incluye `latest.json` y su `.sig`
+      (artefactos del updater): con la clave de firma activada aparecen solos.
+- [ ] Instalar en una máquina y confirmar que el ejecutable instalado
+      (`futsal-stats.exe`) también figura firmado (Propiedades → Firmas
+      digitales).
+- [ ] Probar el updater de punta a punta en la siguiente versión: una
+      instalación X.Y.Z debe ofrecer el punto verde en la Sidebar al salir
+      X.Y.Z+1.
+
+*Fase 4 — Cierre documental*
+
+- [ ] Actualizar el «Estado» de esta sección y marcar A1/A2 como HECHOS en
+      `docs/roadmap.md`.
+- [ ] Nota de expectativas: la reputación de SmartScreen se acumula con las
+      primeras descargas firmadas; el aviso puede seguir apareciendo unos
+      días/semanas aunque todo esté bien firmado.
+
 **Cómo funciona en CI** (automático en el próximo tag una vez dados de alta
 los secrets):
 - `release.yml` conecta SimplySign Desktop en el runner y monta la tarjeta:
