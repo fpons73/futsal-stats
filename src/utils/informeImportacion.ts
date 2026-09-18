@@ -73,7 +73,9 @@ export async function exportarInforme(
 ): Promise<void> {
     const { save } = await import("@tauri-apps/plugin-dialog");
     const { writeTextFile } = await import("@tauri-apps/plugin-fs");
-    const base = `informe_importacion_${informe.tipo}_${new Date().toISOString().slice(0, 10)}`;
+    // Fecha del informe = momento de la importación documentada (determinista
+    // y honesto), no la del día en que se exporta el fichero.
+    const base = `informe_importacion_${informe.tipo}_${informe.fecha.slice(0, 10)}`;
     const ruta = await save({
         defaultPath: `${base}.${formato}`,
         filters: [{ name: formato.toUpperCase(), extensions: [formato] }],
