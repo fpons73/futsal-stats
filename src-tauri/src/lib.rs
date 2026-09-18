@@ -418,6 +418,12 @@ pub fn migraciones() -> Vec<Migration> {
             sql: include_str!("../migrations/13_normalizar_roles.sql"),
             kind: MigrationKind::Up,
         },
+        Migration {
+            version: 14,
+            description: "crono_directo",
+            sql: include_str!("../migrations/14_crono_directo.sql"),
+            kind: MigrationKind::Up,
+        },
     ]
 }
 

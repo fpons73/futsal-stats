@@ -13,6 +13,7 @@ import { toast } from "../components/Toast";
 import { useConfirm } from "../components/ConfirmDialog";
 import { useFormGuard } from "../hooks/useFormGuard";
 import { CampoFutsal } from "../components/CampoFutsal";
+import PanelDirecto from "../components/PanelDirecto";
 import { ModalEvento } from "../components/ModalEvento";
 import { EstadisticasPartido } from "../components/EstadisticasPartido";
 import { EstadisticasJugadorPartido } from "../components/EstadisticasJugadorPartido";
@@ -864,6 +865,20 @@ export default function DetallePartido() {
         await cargarPartido();
     }
 
+    // --- DIRECTO (B2): listas para el panel de la pizarra y recarga post-acción ---
+    const aJugadorDirecto = (p: PersonaAlineada) => ({
+        persona_id: p.persona_id,
+        dorsal: typeof p.dorsal === "number" ? p.dorsal : p.dorsal ? parseInt(String(p.dorsal), 10) : null,
+        nombre: p.nombre,
+        posicion: p.posicion || null,
+    });
+    const jugadoresDirectoLocal = plantillaLocal.filter(p => !p.es_entrenador).map(aJugadorDirecto);
+    const jugadoresDirectoVisitante = plantillaVisitante.filter(p => !p.es_entrenador).map(aJugadorDirecto);
+    const recargarTrasAccionDirecta = useCallback(async () => {
+        await cargarEventos();
+        await cargarPartido();
+    }, []);
+
     // --- UNDO DE BORRADO DE EVENTOS (componente reutilizable) ---
     const { pendiente: eventoBorrado, push: pushEventoBorrado, clear: clearEventoBorrado } = useUndoToast<Evento>();
 
@@ -1284,9 +1299,19 @@ export default function DetallePartido() {
 
             {/* CONTENIDO PRINCIPAL */}
             <div className="flex-1 overflow-auto px-8 pb-24">
-                {/* TAB: PIZARRA (campo a pantalla completa) */}
+                {/* TAB: PIZARRA (panel de directo B2 + campo a pantalla completa) */}
                 {tab === "pizarra" && (
-                    <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden shadow-xl bg-navy-dark/30 h-[calc(100vh-260px)] min-h-[420px]">
+                    <div className="flex flex-col gap-4">
+                    <PanelDirecto
+                        partidoId={Number(id)}
+                        localEquipoId={partido.local_id}
+                        visitanteEquipoId={partido.visitante_id}
+                        estadoPartido={partido.estado}
+                        jugadoresLocal={jugadoresDirectoLocal}
+                        jugadoresVisitante={jugadoresDirectoVisitante}
+                        onDatosActualizados={recargarTrasAccionDirecta}
+                    />
+                    <div className="glass-panel rounded-2xl border border-white/5 overflow-hidden shadow-xl bg-navy-dark/30 h-[calc(100vh-420px)] min-h-[420px]">
                         <CampoFutsal
                             localNombre={partido.local_nombre}
                             visitanteNombre={partido.visitante_nombre}
@@ -1312,6 +1337,7 @@ export default function DetallePartido() {
                         }}
                             fechaPartido={partido.fecha}
                         />
+                    </div>
                     </div>
                 )}
 
